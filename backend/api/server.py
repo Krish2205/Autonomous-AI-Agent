@@ -8,7 +8,8 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from backend.config import DOCUMENTS_DIR
+from fastapi.staticfiles import StaticFiles
+from backend.config import DOCUMENTS_DIR, GENERATED_IMAGES_DIR
 
 from backend.core.registry import AgentRegistry
 from backend.core.orchestrator import Orchestrator
@@ -32,6 +33,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.mount("/images", StaticFiles(directory=GENERATED_IMAGES_DIR), name="images")
 
 # ── Initialize on startup ──────────────────────────────────────────
 registry = AgentRegistry()

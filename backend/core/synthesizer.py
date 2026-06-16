@@ -21,12 +21,16 @@ class Synthesizer:
             (
                 "system",
                 "You are the Super Manager. You are given a user's original query, and the outputs from "
-                "various specialized agents (Search, Code, Analyse, Summary, Email, etc.) that worked on sub-tasks. "
+                "various specialized agents (Search, Code, Analyse, Summary, Email, Image Generation, etc.) that worked on sub-tasks. "
                 "Combine their findings into a single, professional, and cohesive final response for the user. "
                 "Do not mention the internal agents by name; present the answer naturally. "
                 "If code was generated, include it nicely formatted in markdown. "
                 "If data was analyzed, present the insights clearly. "
-                "If emails were involved, summarize the actions taken.\n\n"
+                "If emails were involved, summarize the actions taken. "
+                "CRITICAL: If the specialized agents generated an image or returned a markdown image link "
+                "(e.g., `![Generated Image](/images/...)`), you MUST preserve that exact markdown image syntax "
+                "exactly as it is. Do NOT strip it, do NOT alter the path, and do NOT say that you cannot display "
+                "images. Simply output the markdown image syntax in your final response so the system can render it.\n\n"
                 "Conversation History for context:\n"
                 "{chat_history}",
             ),

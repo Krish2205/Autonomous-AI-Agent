@@ -17,10 +17,11 @@ DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 DOCUMENTS_DIR = os.path.join(DATA_DIR, "documents")
 FAISS_DIR = os.path.join(DATA_DIR, "faiss_index")
 WORKSPACE_DIR = os.path.join(DATA_DIR, "workspace")
+GENERATED_IMAGES_DIR = os.path.join(DATA_DIR, "generated_images")
 DATABASE_PATH = os.path.join(DATA_DIR, "jarvis.db")
 
 # Ensure directories exist
-for _dir in [DATA_DIR, DOCUMENTS_DIR, FAISS_DIR, WORKSPACE_DIR]:
+for _dir in [DATA_DIR, DOCUMENTS_DIR, FAISS_DIR, WORKSPACE_DIR, GENERATED_IMAGES_DIR]:
     os.makedirs(_dir, exist_ok=True)
 
 # ── API Keys ────────────────────────────────────────────────────────
