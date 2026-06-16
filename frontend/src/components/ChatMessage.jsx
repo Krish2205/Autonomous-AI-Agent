@@ -109,6 +109,8 @@ function applyInlineStyles(text) {
     const codeMatch = remaining.match(/`([^`]+)`/);
     // Bold: **text** or __text__
     const boldMatch = remaining.match(/\*\*([^*]+)\*\*/);
+    // Image: ![alt](url)
+    const imgMatch = remaining.match(/!\[([^\]]*)\]\(([^)]+)\)/);
 
     let firstMatch = null;
     let firstIndex = remaining.length;
@@ -120,6 +122,10 @@ function applyInlineStyles(text) {
     if (boldMatch && boldMatch.index < firstIndex) {
       firstMatch = { type: 'bold', match: boldMatch };
       firstIndex = boldMatch.index;
+    }
+    if (imgMatch && imgMatch.index < firstIndex) {
+      firstMatch = { type: 'image', match: imgMatch };
+      firstIndex = imgMatch.index;
     }
 
     if (!firstMatch) {
@@ -137,6 +143,21 @@ function applyInlineStyles(text) {
       parts.push(<code key={`c-${key++}`}>{m[1]}</code>);
     } else if (firstMatch.type === 'bold') {
       parts.push(<strong key={`b-${key++}`}>{m[1]}</strong>);
+    } else if (firstMatch.type === 'image') {
+      parts.push(
+        <img
+          key={`img-${key++}`}
+          src={m[2]}
+          alt={m[1]}
+          style={{
+            maxWidth: '100%',
+            borderRadius: '8px',
+            marginTop: '8px',
+            display: 'block',
+            border: '1px solid var(--border-color, #3a2d54)'
+          }}
+        />
+      );
     }
 
     remaining = remaining.substring(firstIndex + m[0].length);
