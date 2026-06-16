@@ -32,3 +32,8 @@ tenacity
 
 # E2B Sandbox
 e2b-code-interpreter
+
+# Google Calendar API
+google-api-python-client==2.160.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.0
