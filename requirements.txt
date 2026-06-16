@@ -7,7 +7,6 @@ langchain
 langchain-core
 langchain-groq
 langchain-community
-langchain-experimental
 langchain-huggingface
 
 # Embeddings & Vector Store
@@ -31,9 +30,5 @@ uvicorn[standard]
 # Reliability
 tenacity
 
-# Google (optional, for Gemini embeddings)
-google-genai==1.0.0
-langchain-google-genai
-google-api-python-client==2.160.0
-google-auth-httplib2==0.2.0
-google-auth-oauthlib==1.2.0
+# E2B Sandbox
+e2b-code-interpreter
