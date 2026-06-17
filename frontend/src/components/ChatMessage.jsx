@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -408,6 +408,47 @@ function InteractiveChart({ spec }) {
 
 export default function ChatMessage({ role, content, timestamp }) {
   const isUser = role === 'user';
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // Stop speaking on unmount
+  useEffect(() => {
+    return () => {
+      if (isPlaying && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [isPlaying]);
+
+  const toggleSpeech = () => {
+    if (!window.speechSynthesis) return;
+
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      setIsPlaying(false);
+    } else {
+      window.speechSynthesis.cancel();
+
+      // Clean markdown tags out so TTS sounds natural
+      let cleanText = content
+        .replace(/```[\s\S]*?```/g, '') // remove code blocks
+        .replace(/`([^`]+)`/g, '$1') // remove inline code backticks
+        .replace(/\*\*([^*]+)\*\*/g, '$1') // remove bold formatting
+        .replace(/#+\s+/g, '') // remove headers
+        .replace(/[-*•]\s+/g, '') // remove list formatting
+        .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '') // remove image tags
+        .trim();
+
+      if (!cleanText) return;
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.lang = 'en-US';
+      utterance.onend = () => setIsPlaying(false);
+      utterance.onerror = () => setIsPlaying(false);
+
+      setIsPlaying(true);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
 
   return (
     <div className={`message ${isUser ? 'user' : 'jarvis'}`}>
@@ -415,8 +456,32 @@ export default function ChatMessage({ role, content, timestamp }) {
         {isUser ? '👤' : '🤖'}
       </div>
       <div>
-        <div className="message-content">
+        <div className="message-content" style={{ position: 'relative', paddingRight: !isUser ? '40px' : undefined }}>
           {parseMarkdown(content)}
+
+          {!isUser && (
+            <button
+              className={`message-speaker-btn ${isPlaying ? 'playing' : ''}`}
+              onClick={toggleSpeech}
+              title={isPlaying ? "Stop reading" : "Read response aloud"}
+              style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+              }}
+            >
+              {isPlaying ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '12px', height: '12px' }}>
+                  <rect x="4" y="4" width="16" height="16" rx="1" ry="1" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '12px', height: '12px' }}>
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                </svg>
+              )}
+            </button>
+          )}
         </div>
         <div className="message-timestamp">
           {formatTimestamp(timestamp)}

@@ -35,6 +35,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
 
+  const messagesEndRef = useRef(null);
+
   // ── Real-Time Notification Stream (SSE) ──────────────────────
   useEffect(() => {
     const eventSource = new EventSource('/api/notifications/stream');
@@ -58,8 +60,6 @@ export default function App() {
       eventSource.close();
     };
   }, []);
-
-  const messagesEndRef = useRef(null);
 
   // ── Current conversation ─────────────────────────────────────
   const activeConversation = conversations.find(c => c.id === activeConversationId);
@@ -176,6 +176,8 @@ export default function App() {
         }
         return c;
       }));
+
+
 
     } catch (error) {
       const errorMessage = {
