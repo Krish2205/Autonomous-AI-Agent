@@ -33,6 +33,31 @@ export default function App() {
   const [agentCount, setAgentCount] = useState(0);
   const [version, setVersion] = useState('1.0.0');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [toasts, setToasts] = useState([]);
+
+  // ── Real-Time Notification Stream (SSE) ──────────────────────
+  useEffect(() => {
+    const eventSource = new EventSource('/api/notifications/stream');
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const id = Math.random().toString(36).substring(2, 9);
+        setToasts(prev => [...prev, { id, ...data }]);
+
+        // Auto-dismiss after 6 seconds
+        setTimeout(() => {
+          setToasts(prev => prev.filter(t => t.id !== id));
+        }, 6000);
+      } catch (err) {
+        console.error("Failed to parse incoming notification:", err);
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, []);
 
   const messagesEndRef = useRef(null);
 
@@ -250,6 +275,30 @@ export default function App() {
   return (
     <>
       <ParticleBackground />
+
+      {/* Floating Toast Notification Container */}
+      <div className="toast-container">
+        {toasts.map(toast => (
+          <div key={toast.id} className={`toast-card ${toast.level}`}>
+            <div className="toast-header">
+              <span className="toast-icon">
+                {toast.level === 'success' && '✅'}
+                {toast.level === 'warning' && '⚠️'}
+                {toast.level === 'error' && '🚨'}
+                {toast.level === 'info' && 'ℹ️'}
+              </span>
+              <strong className="toast-title">{toast.title}</strong>
+              <button
+                className="toast-close"
+                onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+              >
+                &times;
+              </button>
+            </div>
+            <div className="toast-body">{toast.message}</div>
+          </div>
+        ))}
+      </div>
 
       <div className="app-layout">
         <Sidebar

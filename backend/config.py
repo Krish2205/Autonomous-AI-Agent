@@ -29,6 +29,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
 GMAIL_EMAIL = os.environ.get("GMAIL_EMAIL")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
+SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
 
 # ── LLM Instances (shared across all agents) ───────────────────────
 llm = ChatGroq(
