@@ -1,4 +1,4 @@
-export default function Header({ isOnline, agentCount, version, sidebarOpen, onToggleSidebar, voiceEnabled, onToggleVoice }) {
+export default function Header({ isOnline, agentCount, version, sidebarOpen, onToggleSidebar }) {
   return (
     <header className="header" id="jarvis-header">
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -23,27 +23,6 @@ export default function Header({ isOnline, agentCount, version, sidebarOpen, onT
       </div>
 
       <div className="header-status">
-        <button
-          className="voice-toggle-btn"
-          onClick={onToggleVoice}
-          title={voiceEnabled ? "Mute Voice Read-Back" : "Enable Voice Read-Back"}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '1.2rem',
-            padding: '4px 8px',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: voiceEnabled ? 'var(--accent-cyan)' : 'var(--text-tertiary)',
-            transition: 'color var(--transition-fast)'
-          }}
-        >
-          {voiceEnabled ? '🔊' : '🔇'}
-        </button>
-
         <div className={`status-badge ${isOnline ? '' : 'offline'}`}>
           <span className="status-dot" />
           {isOnline ? 'System Online' : 'Offline'}
