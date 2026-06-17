@@ -16,6 +16,7 @@ from backend.agents.visualization_agent import VisualizationAgent
 from backend.agents.notification_agent import NotificationAgent
 from backend.agents.voice_agent import VoiceAgent
 from backend.agents.finance_agent import FinanceAgent
+from backend.agents.package_manager_agent import PackageManagerAgent
 
 # All available agent classes
 ALL_AGENTS = [
@@ -32,6 +33,7 @@ ALL_AGENTS = [
     NotificationAgent,
     VoiceAgent,
     FinanceAgent,
+    PackageManagerAgent,
 ]
 
 __all__ = [
@@ -48,5 +50,7 @@ __all__ = [
     "NotificationAgent",
     "VoiceAgent",
     "FinanceAgent",
+    "PackageManagerAgent",
     "ALL_AGENTS",
 ]
+
