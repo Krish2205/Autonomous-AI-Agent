@@ -18,6 +18,7 @@ from backend.agents.voice_agent import VoiceAgent
 from backend.agents.finance_agent import FinanceAgent
 from backend.agents.package_manager_agent import PackageManagerAgent
 from backend.agents.translation_agent import TranslationAgent
+from backend.agents.maps_agent import MapsAgent
 
 # All available agent classes
 ALL_AGENTS = [
@@ -36,6 +37,7 @@ ALL_AGENTS = [
     FinanceAgent,
     PackageManagerAgent,
     TranslationAgent,
+    MapsAgent,
 ]
 
 __all__ = [
@@ -54,6 +56,7 @@ __all__ = [
     "FinanceAgent",
     "PackageManagerAgent",
     "TranslationAgent",
+    "MapsAgent",
     "ALL_AGENTS",
 ]
 
