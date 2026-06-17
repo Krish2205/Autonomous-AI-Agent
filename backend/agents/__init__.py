@@ -13,6 +13,7 @@ from backend.agents.scraper_agent import ScraperAgent
 from backend.agents.image_gen_agent import ImageGenAgent
 from backend.agents.calendar_agent import CalendarAgent
 from backend.agents.visualization_agent import VisualizationAgent
+from backend.agents.notification_agent import NotificationAgent
 
 # All available agent classes
 ALL_AGENTS = [
@@ -26,6 +27,7 @@ ALL_AGENTS = [
     ImageGenAgent,
     CalendarAgent,
     VisualizationAgent,
+    NotificationAgent,
 ]
 
 __all__ = [
@@ -39,5 +41,6 @@ __all__ = [
     "ImageGenAgent",
     "CalendarAgent",
     "VisualizationAgent",
+    "NotificationAgent",
     "ALL_AGENTS",
 ]

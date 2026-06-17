@@ -4,8 +4,11 @@ REST API for the multi-agent system.
 """
 
 import os
+import json
+import asyncio
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from fastapi.staticfiles import StaticFiles
@@ -14,6 +17,7 @@ from backend.config import DOCUMENTS_DIR, GENERATED_IMAGES_DIR
 from backend.core.registry import AgentRegistry
 from backend.core.orchestrator import Orchestrator
 from backend.core.memory import ConversationMemory
+from backend.core.notifications import notification_manager
 from backend.agents import ALL_AGENTS
 from backend.logger import get_logger
 
@@ -194,3 +198,41 @@ def run_single_agent(agent_name: str, request: QueryRequest):
     except Exception as e:
         logger.error(f"Agent {agent_name} failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/notifications/stream")
+async def notifications_stream():
+    """SSE endpoint for streaming real-time notifications to the frontend."""
+    queue = notification_manager.register_queue()
+
+    async def event_generator():
+        try:
+            while True:
+                # Wait for a notification to be broadcasted
+                notification = await queue.get()
+                yield f"data: {json.dumps(notification)}\n\n"
+        except asyncio.CancelledError:
+            # Clean up when connection closes
+            pass
+        finally:
+            notification_manager.unregister_queue(queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+class TestAlertRequest(BaseModel):
+    title: str
+    message: str
+    level: str = "info"
+
+
+@app.post("/api/notifications/test")
+def trigger_test_notification(request: TestAlertRequest):
+    """Debug endpoint to manually fire notifications for testing."""
+    notification_payload = {
+        "title": request.title,
+        "message": request.message,
+        "level": request.level,
+    }
+    notification_manager.broadcast(notification_payload)
+    return {"status": "success", "message": "Test notification broadcasted."}
