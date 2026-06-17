@@ -198,6 +198,8 @@ function applyInlineStyles(text) {
 
 function InteractiveChart({ spec }) {
   const { type, title, data, xKey, yKeys, xLabel, yLabel } = spec;
+  const [chartType, setChartType] = useState(type);
+  const [timeline, setTimeline] = useState('All');
 
   // Curated color palette matching our variables
   const colors = [
@@ -209,14 +211,37 @@ function InteractiveChart({ spec }) {
     '#3b82f6', // Blue
   ];
 
+  const getFilteredData = () => {
+    if (!data) return [];
+    if (data.length <= 20) return data; // simple categories, no slicing
+
+    switch (timeline) {
+      case '1W':
+        return data.slice(-7);
+      case '1M':
+        return data.slice(-30);
+      case '6M':
+        return data.slice(-130);
+      case '1Y':
+        return data.slice(-252);
+      case '5Y':
+        return data.slice(-1260);
+      case 'All':
+      default:
+        return data;
+    }
+  };
+
+  const filteredData = getFilteredData();
+
   const renderChart = () => {
-    switch (type) {
+    switch (chartType) {
       case 'line':
         return (
-          <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <LineChart data={filteredData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(100, 120, 255, 0.1)" />
-            <XAxis dataKey={xKey} stroke="#8b8fad" fontSize={11} />
-            <YAxis stroke="#8b8fad" fontSize={11} />
+            <XAxis dataKey={xKey} stroke="#8b8fad" fontSize={10} />
+            <YAxis stroke="#8b8fad" fontSize={10} />
             <Tooltip
               contentStyle={{
                 backgroundColor: 'rgba(18, 18, 50, 0.95)',
@@ -232,8 +257,9 @@ function InteractiveChart({ spec }) {
                 type="monotone"
                 dataKey={key}
                 stroke={colors[index % colors.length]}
-                strokeWidth={2.5}
-                activeDot={{ r: 6 }}
+                strokeWidth={2}
+                dot={filteredData.length < 30 ? { r: 3 } : false}
+                activeDot={{ r: 5 }}
               />
             ))}
             {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />}
@@ -241,7 +267,7 @@ function InteractiveChart({ spec }) {
         );
       case 'area':
         return (
-          <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart data={filteredData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
               {yKeys.map((key, index) => {
                 const color = colors[index % colors.length];
@@ -254,8 +280,8 @@ function InteractiveChart({ spec }) {
               })}
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(100, 120, 255, 0.1)" />
-            <XAxis dataKey={xKey} stroke="#8b8fad" fontSize={11} />
-            <YAxis stroke="#8b8fad" fontSize={11} />
+            <XAxis dataKey={xKey} stroke="#8b8fad" fontSize={10} />
+            <YAxis stroke="#8b8fad" fontSize={10} />
             <Tooltip
               contentStyle={{
                 backgroundColor: 'rgba(18, 18, 50, 0.95)',
@@ -284,16 +310,16 @@ function InteractiveChart({ spec }) {
         return (
           <PieChart>
             <Pie
-              data={data}
+              data={filteredData}
               cx="50%"
               cy="50%"
               innerRadius={50}
-              outerRadius={80}
+              outerRadius={85}
               paddingAngle={4}
               dataKey={pieKey}
               nameKey={xKey}
             >
-              {data.map((entry, index) => (
+              {filteredData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
               ))}
             </Pie>
@@ -311,10 +337,10 @@ function InteractiveChart({ spec }) {
         );
       case 'scatter':
         return (
-          <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <LineChart data={filteredData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(100, 120, 255, 0.1)" />
-            <XAxis dataKey={xKey} stroke="#8b8fad" fontSize={11} />
-            <YAxis stroke="#8b8fad" fontSize={11} />
+            <XAxis dataKey={xKey} stroke="#8b8fad" fontSize={10} />
+            <YAxis stroke="#8b8fad" fontSize={10} />
             <Tooltip
               contentStyle={{
                 backgroundColor: 'rgba(18, 18, 50, 0.95)',
@@ -331,8 +357,8 @@ function InteractiveChart({ spec }) {
                 dataKey={key}
                 stroke={colors[index % colors.length]}
                 strokeWidth={0}
-                dot={{ r: 6, strokeWidth: 2 }}
-                activeDot={{ r: 8 }}
+                dot={{ r: filteredData.length < 50 ? 5 : 2, strokeWidth: 1 }}
+                activeDot={{ r: 6 }}
               />
             ))}
             {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />}
@@ -341,10 +367,10 @@ function InteractiveChart({ spec }) {
       case 'bar':
       default:
         return (
-          <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <BarChart data={filteredData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(100, 120, 255, 0.1)" />
-            <XAxis dataKey={xKey} stroke="#8b8fad" fontSize={11} />
-            <YAxis stroke="#8b8fad" fontSize={11} />
+            <XAxis dataKey={xKey} stroke="#8b8fad" fontSize={10} />
+            <YAxis stroke="#8b8fad" fontSize={10} />
             <Tooltip
               contentStyle={{
                 backgroundColor: 'rgba(18, 18, 50, 0.95)',
@@ -383,20 +409,72 @@ function InteractiveChart({ spec }) {
         backdropFilter: 'blur(10px)',
       }}
     >
-      {title && (
-        <h4
-          style={{
-            margin: '0 0 16px 0',
-            fontSize: '1.05rem',
-            fontWeight: 650,
-            background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}
-        >
-          {title}
-        </h4>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+        {title && (
+          <h4
+            style={{
+              margin: 0,
+              fontSize: '1rem',
+              fontWeight: 650,
+              background: 'linear-gradient(135deg, #00d4ff, #7c3aed)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            {title}
+          </h4>
+        )}
+
+        {/* Chart Type Toggles */}
+        <div style={{ display: 'flex', gap: '4px', background: 'rgba(0, 0, 0, 0.2)', padding: '2px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+          {['line', 'area', 'bar', 'scatter'].map((t) => (
+            <button
+              key={t}
+              onClick={() => setChartType(t)}
+              style={{
+                background: chartType === t ? 'rgba(124, 58, 237, 0.3)' : 'transparent',
+                border: 'none',
+                color: chartType === t ? '#00d4ff' : '#8b8fad',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '0.75rem',
+                textTransform: 'capitalize',
+                transition: 'all 0.2s',
+                fontWeight: chartType === t ? '600' : '400'
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Slicing range selector (only show if data represents long time-series history) */}
+      {data && data.length > 20 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px', marginBottom: '16px' }}>
+          {['1W', '1M', '6M', '1Y', '5Y', 'All'].map((t) => (
+            <button
+              key={t}
+              onClick={() => setTimeline(t)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: timeline === t ? '#00d4ff' : '#555876',
+                padding: '2px 6px',
+                cursor: 'pointer',
+                fontSize: '0.7rem',
+                fontWeight: timeline === t ? '700' : '500',
+                borderBottom: timeline === t ? '2px solid #00d4ff' : '2px solid transparent',
+                transition: 'all 0.2s'
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
       )}
+
       <div style={{ width: '100%', height: 260 }}>
         <ResponsiveContainer width="100%" height="100%">
           {renderChart()}

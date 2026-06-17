@@ -41,3 +41,6 @@ google-auth-oauthlib==1.2.0
 # Visualization Agent
 matplotlib
 seaborn
+
+# Finance Agent
+yfinance
