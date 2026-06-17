@@ -34,6 +34,31 @@ export default function App() {
   const [version, setVersion] = useState('1.0.0');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+
+  const messagesEndRef = useRef(null);
+
+  // ── Speech Synthesis Helper ──────────────────────────────────
+  const speakText = (text) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+
+    // Clean up Markdown, code blocks, tables, images for speech readability
+    let cleanText = text
+      .replace(/```[\s\S]*?```/g, '') // remove code blocks
+      .replace(/`([^`]+)`/g, '$1') // remove inline code formatting
+      .replace(/\*\*([^*]+)\*\*/g, '$1') // remove bold formatting
+      .replace(/#+\s+/g, '') // remove headers
+      .replace(/[-*•]\s+/g, '') // remove list dots/bullets
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '') // remove images
+      .trim();
+
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'en-US';
+    window.speechSynthesis.speak(utterance);
+  };
 
   // ── Real-Time Notification Stream (SSE) ──────────────────────
   useEffect(() => {
@@ -58,8 +83,6 @@ export default function App() {
       eventSource.close();
     };
   }, []);
-
-  const messagesEndRef = useRef(null);
 
   // ── Current conversation ─────────────────────────────────────
   const activeConversation = conversations.find(c => c.id === activeConversationId);
@@ -176,6 +199,11 @@ export default function App() {
         }
         return c;
       }));
+
+      // Speak response if enabled
+      if (voiceEnabled) {
+        speakText(jarvisMessage.content);
+      }
 
     } catch (error) {
       const errorMessage = {
@@ -318,6 +346,8 @@ export default function App() {
             version={version}
             sidebarOpen={sidebarOpen}
             onToggleSidebar={() => setSidebarOpen(prev => !prev)}
+            voiceEnabled={voiceEnabled}
+            onToggleVoice={() => setVoiceEnabled(prev => !prev)}
           />
 
           <div className="chat-area">

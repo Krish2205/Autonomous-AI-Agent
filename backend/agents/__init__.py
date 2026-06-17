@@ -14,6 +14,7 @@ from backend.agents.image_gen_agent import ImageGenAgent
 from backend.agents.calendar_agent import CalendarAgent
 from backend.agents.visualization_agent import VisualizationAgent
 from backend.agents.notification_agent import NotificationAgent
+from backend.agents.voice_agent import VoiceAgent
 
 # All available agent classes
 ALL_AGENTS = [
@@ -28,6 +29,7 @@ ALL_AGENTS = [
     CalendarAgent,
     VisualizationAgent,
     NotificationAgent,
+    VoiceAgent,
 ]
 
 __all__ = [
@@ -42,5 +44,6 @@ __all__ = [
     "CalendarAgent",
     "VisualizationAgent",
     "NotificationAgent",
+    "VoiceAgent",
     "ALL_AGENTS",
 ]
