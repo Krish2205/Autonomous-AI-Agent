@@ -32,10 +32,10 @@ def validate_path(project_path: str) -> str:
     Validates that the project_path resides within the permitted workspace or project root.
     Returns the resolved absolute path if valid, raises ValueError otherwise.
     """
-    abs_path = os.path.abspath(project_path)
+    abs_path = os.path.normcase(os.path.abspath(project_path))
     allowed_roots = [
-        os.path.abspath(PROJECT_ROOT),
-        os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
+        os.path.normcase(os.path.abspath(PROJECT_ROOT)),
+        os.path.normcase(os.path.abspath(os.path.join(PROJECT_ROOT, "..")))
     ]
     
     is_allowed = False
@@ -46,7 +46,7 @@ def validate_path(project_path: str) -> str:
             
     if not is_allowed:
         raise ValueError(f"Path '{project_path}' is outside the authorized workspace boundaries.")
-    return abs_path
+    return os.path.abspath(project_path)
 
 @tool
 def detect_ecosystem(project_path: str) -> str:

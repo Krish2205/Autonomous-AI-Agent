@@ -46,7 +46,7 @@ class ColoredFormatter(logging.Formatter):
 
 def get_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     """
-    Get a color-coded logger for a module.
+    Get a color-coded logger for a module that outputs to stdout and data/jarvis_app.log.
 
     Usage:
         from backend.logger import get_logger
@@ -57,9 +57,30 @@ def get_logger(name: str, level: int = logging.INFO) -> logging.Logger:
 
     if not logger.handlers:
         logger.setLevel(level)
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(ColoredFormatter())
-        logger.addHandler(handler)
+        
+        # Console Handler
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(ColoredFormatter())
+        logger.addHandler(console_handler)
+        
+        # File Handler
+        try:
+            import os
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            log_dir = os.path.abspath(os.path.join(current_dir, "..", "data"))
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, "jarvis_app.log")
+            
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            file_formatter = logging.Formatter(
+                "%(asctime)s [%(levelname)s] %(name)s -> %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S"
+            )
+            file_handler.setFormatter(file_formatter)
+            logger.addHandler(file_handler)
+        except Exception:
+            pass
+            
         logger.propagate = False
 
     return logger
