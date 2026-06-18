@@ -9,6 +9,7 @@ import ChatInput from './components/ChatInput';
 import TypingIndicator from './components/TypingIndicator';
 import Login from './components/Login';
 import { supabase } from './supabaseClient';
+import DevPanel from './components/DevPanel';
 
 // ── Helpers ────────────────────────────────────────────────────────
 function generateId() {
@@ -40,6 +41,7 @@ export default function App() {
   const [agentCount, setAgentCount] = useState(0);
   const [version, setVersion] = useState('1.0.0');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
 
   const messagesEndRef = useRef(null);
@@ -515,6 +517,7 @@ export default function App() {
             user={user}
             onLogout={handleLogout}
             onDeleteActiveWorkspace={handleDeleteActiveWorkspace}
+            onToggleDevPanel={() => setIsDevPanelOpen(true)}
           />
 
           <div className="chat-area">
@@ -573,6 +576,14 @@ export default function App() {
 
         <AgentPanel activeAgents={activeAgents} />
       </div>
+
+      {isDevPanelOpen && (
+        <DevPanel
+          sessionToken={sessionToken}
+          userId={user?.id}
+          onClose={() => setIsDevPanelOpen(false)}
+        />
+      )}
     </>
   );
 }

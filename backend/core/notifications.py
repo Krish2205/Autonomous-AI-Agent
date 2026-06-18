@@ -41,6 +41,17 @@ class NotificationManager:
             user_id = current_user_id.get() or "default"
 
         logger.info(f"Broadcasting notification to user '{user_id}': {notification.get('title', 'No Title')}")
+        
+        # Trigger registered outgoing webhooks (Slack, Discord, generic APIs)
+        try:
+            from backend.core.webhooks import trigger_outgoing_webhooks
+            title = notification.get("title", "Alert")
+            message = notification.get("message", "")
+            level = notification.get("level", "info")
+            trigger_outgoing_webhooks(user_id, title, message, level)
+        except Exception as e:
+            logger.error(f"Failed to dispatch webhooks on broadcast: {e}")
+
         target_queues = self.queues.get(user_id, [])
         for q in target_queues:
             try:

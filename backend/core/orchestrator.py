@@ -10,6 +10,7 @@ from backend.core.registry import AgentRegistry
 from backend.core.planner import Planner, PlannerStep
 from backend.core.synthesizer import Synthesizer
 from backend.core.memory import ConversationMemory
+from backend.core.analytics import current_session_id, current_query_id, current_step_name
 from backend.logger import get_logger
 
 logger = get_logger("core.orchestrator")
@@ -74,6 +75,10 @@ class Orchestrator:
         """
         logger.info(f"Processing query: {query} (session: {session_id})")
 
+        # Set usage analytics context parameters
+        current_session_id.set(session_id)
+        current_query_id.set(query)
+
         # Load conversation memory
         memory = ConversationMemory(session_id)
         chat_history = memory.get_context_string()
@@ -94,6 +99,7 @@ class Orchestrator:
             scratchpad = "\n".join(scratchpad_lines) if scratchpad_lines else "No steps taken yet."
 
             # Step 1: Ask planner what to do next
+            current_step_name.set(f"planner_step_{step_num}")
             plan_step = self.planner.plan(query, chat_history=chat_history, scratchpad=scratchpad)
 
             if plan_step.action == "finish":
@@ -109,6 +115,7 @@ class Orchestrator:
                 break
 
             agents_used.add(agent_name)
+            current_step_name.set(f"agent:{agent_name}")
             result = self._execute_task(agent_name, agent_query)
 
             # Record step
@@ -134,6 +141,7 @@ class Orchestrator:
             combined_results = "No action steps were required."
 
         # Step 3: Synthesize (with history context)
+        current_step_name.set("synthesizer")
         final_response = self.synthesizer.synthesize(query, combined_results, chat_history=chat_history)
 
         # Step 4: Save turn to memory

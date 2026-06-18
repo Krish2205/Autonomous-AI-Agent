@@ -387,3 +387,185 @@ def trigger_test_notification(request: TestAlertRequest, current_user: str = Dep
     }
     notification_manager.broadcast(notification_payload)
     return {"status": "success", "message": "Test notification broadcasted."}
+
+
+# ── Webhook / Analytics Schemas and Endpoints ────────────────────────
+class WebhookCreate(BaseModel):
+    name: str
+    url: str
+    service: str  # 'slack', 'discord', 'generic'
+
+
+@app.post("/api/webhooks/incoming/{user_id}/{source}")
+async def handle_incoming_webhook(user_id: str, source: str, payload: dict):
+    """Handle incoming webhooks (GitHub, Stripe, etc.) for a user, log and notify."""
+    from backend.core.webhooks import log_incoming_webhook
+    
+    # 1. Log the payload to SQLite
+    log_incoming_webhook(user_id, source, payload)
+    
+    # 2. Format custom message based on source
+    title = f"Webhook: {source.upper()}"
+    message = "Received incoming trigger event."
+    level = "info"
+    
+    if source.lower() == "github":
+        repo = payload.get("repository", {}).get("name", "Unknown Repo")
+        pusher = payload.get("pusher", {}).get("name", "Someone")
+        commits = payload.get("commits", [])
+        commit_msg = commits[0].get("message", "No message") if commits else "No commit list"
+        message = f"Push to '{repo}' by '{pusher}': \"{commit_msg}\""
+        level = "success"
+    elif source.lower() == "stripe":
+        event_type = payload.get("type", "unknown_event")
+        data_obj = payload.get("data", {}).get("object", {})
+        amount = data_obj.get("amount", 0) / 100.0 if "amount" in data_obj else None
+        currency = data_obj.get("currency", "usd").upper()
+        if amount:
+            message = f"Stripe '{event_type}': Received {amount:.2f} {currency}"
+        else:
+            message = f"Stripe '{event_type}' event processed."
+        level = "warning" if "fail" in event_type else "success"
+    else:
+        message = f"Generic event payload: {json.dumps(payload)[:100]}..."
+        
+    # 3. Broadcast notification to user's SSE queue
+    notification_manager.broadcast(
+        {"title": title, "message": message, "level": level},
+        user_id=user_id
+    )
+    return {"status": "success", "message": f"Webhook from {source} processed."}
+
+
+@app.get("/api/webhooks/outgoing")
+def get_outgoing_webhooks(current_user: str = Depends(get_current_user)):
+    """Retrieve all configured outgoing webhooks for the user."""
+    from backend.core.webhooks import list_outgoing_webhooks
+    return list_outgoing_webhooks(current_user)
+
+
+@app.post("/api/webhooks/outgoing")
+def create_outgoing_webhook(request: WebhookCreate, current_user: str = Depends(get_current_user)):
+    """Configure a new outgoing webhook trigger."""
+    from backend.core.webhooks import add_outgoing_webhook
+    new_id = add_outgoing_webhook(current_user, request.name, request.url, request.service)
+    if new_id < 0:
+        raise HTTPException(status_code=500, detail="Failed to create outgoing webhook")
+    return {"status": "success", "id": new_id}
+
+
+@app.delete("/api/webhooks/outgoing/{webhook_id}")
+def remove_outgoing_webhook(webhook_id: int, current_user: str = Depends(get_current_user)):
+    """Delete an outgoing webhook trigger configuration."""
+    from backend.core.webhooks import delete_outgoing_webhook
+    ok = delete_outgoing_webhook(current_user, webhook_id)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to delete outgoing webhook")
+    return {"status": "success"}
+
+
+@app.get("/api/webhooks/incoming/logs")
+def get_incoming_webhook_logs(current_user: str = Depends(get_current_user)):
+    """Retrieve history of received incoming webhook logs."""
+    from backend.core.webhooks import list_incoming_logs
+    return list_incoming_logs(current_user)
+
+
+@app.get("/api/analytics/summary")
+def get_analytics_summary(current_user: str = Depends(get_current_user)):
+    """Fetch usage query statistics, token totals, latency averages, and costs."""
+    import sqlite3
+    from backend.core.analytics import ANALYTICS_DB_PATH
+    try:
+        conn = sqlite3.connect(ANALYTICS_DB_PATH)
+        cursor = conn.cursor()
+        
+        # General stats
+        cursor.execute("""
+            SELECT 
+                COUNT(DISTINCT query) as total_queries,
+                SUM(prompt_tokens) as total_prompt_tokens,
+                SUM(completion_tokens) as total_completion_tokens,
+                SUM(total_tokens) as total_tokens,
+                AVG(latency_ms) as avg_latency,
+                SUM(estimated_cost_usd) as total_cost
+            FROM usage_analytics
+            WHERE user_id = ?
+        """, (current_user,))
+        row = cursor.fetchone()
+        
+        total_queries = row[0] or 0
+        total_prompt_tokens = row[1] or 0
+        total_completion_tokens = row[2] or 0
+        total_tokens = row[3] or 0
+        avg_latency = row[4] or 0.0
+        total_cost = row[5] or 0.0
+        
+        # Grouped by step_name
+        cursor.execute("""
+            SELECT step_name, SUM(total_tokens) as tokens, SUM(estimated_cost_usd) as cost, AVG(latency_ms) as latency
+            FROM usage_analytics
+            WHERE user_id = ?
+            GROUP BY step_name
+        """, (current_user,))
+        step_rows = cursor.fetchall()
+        by_step = [
+            {"step_name": r[0], "total_tokens": r[1] or 0, "estimated_cost_usd": r[2] or 0.0, "avg_latency_ms": r[3] or 0.0}
+            for r in step_rows
+        ]
+        
+        # Grouped by model_name
+        cursor.execute("""
+            SELECT model_name, SUM(total_tokens) as tokens, SUM(estimated_cost_usd) as cost
+            FROM usage_analytics
+            WHERE user_id = ?
+            GROUP BY model_name
+        """, (current_user,))
+        model_rows = cursor.fetchall()
+        by_model = [
+            {"model_name": r[0], "total_tokens": r[1] or 0, "estimated_cost_usd": r[2] or 0.0}
+            for r in model_rows
+        ]
+        
+        conn.close()
+        
+        return {
+            "total_queries": total_queries,
+            "total_prompt_tokens": total_prompt_tokens,
+            "total_completion_tokens": total_completion_tokens,
+            "total_tokens": total_tokens,
+            "avg_latency_ms": avg_latency,
+            "total_cost_usd": total_cost,
+            "breakdown_by_step": by_step,
+            "breakdown_by_model": by_model
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch analytics summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/analytics/history")
+def get_analytics_history(current_user: str = Depends(get_current_user)):
+    """Fetch recent execution step logs for token tracking audit."""
+    import sqlite3
+    from backend.core.analytics import ANALYTICS_DB_PATH
+    try:
+        conn = sqlite3.connect(ANALYTICS_DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, session_id, query, step_name, model_name,
+                   prompt_tokens, completion_tokens, total_tokens,
+                   latency_ms, estimated_cost_usd, timestamp
+            FROM usage_analytics
+            WHERE user_id = ?
+            ORDER BY timestamp DESC
+            LIMIT 50
+        """, (current_user,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        logger.error(f"Failed to fetch analytics history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
