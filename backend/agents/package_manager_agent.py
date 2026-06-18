@@ -1,6 +1,6 @@
 """
 JARVIS — Package Manager Agent
-Manages dependencies and environments (pip, npm) with strict parameter validations.
+Manages dependencies and environments (pip, npm) using secure containerized Docker sandboxes.
 """
 
 import os
@@ -17,18 +17,15 @@ except ImportError:
 from langchain_core.prompts import ChatPromptTemplate
 
 from backend.agents.base import BaseAgent
-from backend.config import PROJECT_ROOT, llm
+from backend.config import PROJECT_ROOT, llm, current_user_id
+from backend.core.sandbox import DockerSandboxManager
 from backend.logger import get_logger
 
 logger = get_logger("agents.package_manager")
 
 # ── Validation Regexes ────────────────────────────────────────────────
-# Python: e.g. requests, numpy==1.24.*, pandas>=2.0
 PYTHON_PKG_REGEX = re.compile(r"^[a-zA-Z0-9_\-\.\[\]]+(?:[<=>!~]+[a-zA-Z0-9_\-\.\*]+)?$")
-
-# Node: e.g. express, lodash@4.17.21, @types/node
 NODE_PKG_REGEX = re.compile(r"^(?:@[a-zA-Z0-9_\-\.]+\/)?[a-zA-Z0-9_\-\.]+(?:@[a-zA-Z0-9_\-\.\*^~]+)?$")
-
 
 def validate_path(project_path: str) -> str:
     """
@@ -36,7 +33,6 @@ def validate_path(project_path: str) -> str:
     Returns the resolved absolute path if valid, raises ValueError otherwise.
     """
     abs_path = os.path.abspath(project_path)
-    # Check if within PROJECT_ROOT (c:/Users/krish/Desktop/LLM/JARVIS or parent workspace c:/Users/krish/Desktop/LLM)
     allowed_roots = [
         os.path.abspath(PROJECT_ROOT),
         os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
@@ -44,7 +40,6 @@ def validate_path(project_path: str) -> str:
     
     is_allowed = False
     for root in allowed_roots:
-        # Check if abs_path is root itself or starts with root directory prefix
         if abs_path == root or abs_path.startswith(root + os.sep):
             is_allowed = True
             break
@@ -52,7 +47,6 @@ def validate_path(project_path: str) -> str:
     if not is_allowed:
         raise ValueError(f"Path '{project_path}' is outside the authorized workspace boundaries.")
     return abs_path
-
 
 @tool
 def detect_ecosystem(project_path: str) -> str:
@@ -77,11 +71,10 @@ def detect_ecosystem(project_path: str) -> str:
         return f"No active ecosystems detected in '{project_path}'. Available files: {os.listdir(abs_path)}"
     return f"Detected ecosystems: {', '.join(ecosystems)}"
 
-
 @tool
 def list_dependencies(ecosystem: Literal["python", "node"], project_path: str) -> str:
     """
-    Lists current dependencies. For python, reads requirements.txt or queries installed venv packages.
+    Lists current dependencies. For python, reads requirements.txt or queries installed packages inside the container.
     For node, reads package.json dependencies.
     """
     try:
@@ -96,15 +89,16 @@ def list_dependencies(ecosystem: Literal["python", "node"], project_path: str) -
                 content = f.read()
             return f"Dependencies from requirements.txt:\n{content}"
         else:
-            # Query active environment
             try:
-                res = subprocess.run(
-                    [sys.executable, "-m", "pip", "list"],
-                    capture_output=True,
-                    text=True,
-                    check=True
-                )
-                return f"Installed python packages:\n{res.stdout}"
+                user_id = current_user_id.get() or "default"
+                sandbox = DockerSandboxManager(user_id)
+                res = sandbox.execute(["pip", "list"])
+                output = f"Installed python packages:\n{res['stdout']}"
+                if res["stderr"]:
+                    output += f"\nStderr:\n{res['stderr']}"
+                if not res["sandboxed"]:
+                    output += "\n[Note: Executed in host fallback environment]"
+                return output
             except Exception as ex:
                 return f"Failed to list python packages: {str(ex)}"
 
@@ -125,23 +119,21 @@ def list_dependencies(ecosystem: Literal["python", "node"], project_path: str) -
 
     return f"Unsupported ecosystem '{ecosystem}' for listing dependencies."
 
-
 @tool
 def install_dependency(ecosystem: Literal["python", "node"], package_name: str, project_path: str) -> str:
     """
-    Installs a single dependency safely in the project_path after validating the name.
+    Installs a single dependency safely inside the sandbox container environment.
     """
     try:
         abs_path = validate_path(project_path)
     except ValueError as e:
         return str(e)
 
-    # Strict regex check to prevent command injections
     package_name = package_name.strip()
     if ecosystem == "python":
         if not PYTHON_PKG_REGEX.match(package_name):
             return f"Validation Error: Package name '{package_name}' is invalid/unsafe for Python pip."
-        cmd = [sys.executable, "-m", "pip", "install", package_name]
+        cmd = ["pip", "install", package_name]
     elif ecosystem == "node":
         if not NODE_PKG_REGEX.match(package_name):
             return f"Validation Error: Package name '{package_name}' is invalid/unsafe for Node npm."
@@ -149,26 +141,29 @@ def install_dependency(ecosystem: Literal["python", "node"], package_name: str, 
     else:
         return f"Unsupported ecosystem '{ecosystem}' for package installation."
 
-    logger.info(f"Executing package installation: {cmd} inside {abs_path}")
+    logger.info(f"Executing package installation: {cmd}")
     try:
-        res = subprocess.run(
-            cmd,
-            cwd=abs_path,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return f"Package '{package_name}' successfully installed.\nOutput:\n{res.stdout}"
-    except subprocess.CalledProcessError as e:
-        return f"Installation failed:\nExit Code: {e.returncode}\nError:\n{e.stderr}\nOutput:\n{e.stdout}"
+        user_id = current_user_id.get() or "default"
+        sandbox = DockerSandboxManager(user_id)
+        res = sandbox.execute(cmd)
+        
+        output = f"Package '{package_name}' installation completed.\n"
+        if res["stdout"]:
+            output += f"Stdout:\n{res['stdout']}\n"
+        if res["stderr"]:
+            output += f"Stderr:\n{res['stderr']}\n"
+        output += f"Exit Code: {res['exit_code']}\n"
+        if not res["sandboxed"]:
+            output += "[Note: Executed in host fallback environment]\n"
+            
+        return output
     except Exception as ex:
         return f"Error executing installation: {str(ex)}"
-
 
 @tool
 def uninstall_dependency(ecosystem: Literal["python", "node"], package_name: str, project_path: str) -> str:
     """
-    Uninstalls a single dependency safely from the project_path.
+    Uninstalls a single dependency safely from the sandbox container environment.
     """
     try:
         abs_path = validate_path(project_path)
@@ -179,7 +174,7 @@ def uninstall_dependency(ecosystem: Literal["python", "node"], package_name: str
     if ecosystem == "python":
         if not PYTHON_PKG_REGEX.match(package_name):
             return f"Validation Error: Package name '{package_name}' is invalid/unsafe for Python pip."
-        cmd = [sys.executable, "-m", "pip", "uninstall", "-y", package_name]
+        cmd = ["pip", "uninstall", "-y", package_name]
     elif ecosystem == "node":
         if not NODE_PKG_REGEX.match(package_name):
             return f"Validation Error: Package name '{package_name}' is invalid/unsafe for Node npm."
@@ -187,21 +182,24 @@ def uninstall_dependency(ecosystem: Literal["python", "node"], package_name: str
     else:
         return f"Unsupported ecosystem '{ecosystem}' for package uninstallation."
 
-    logger.info(f"Executing package uninstallation: {cmd} inside {abs_path}")
+    logger.info(f"Executing package uninstallation: {cmd}")
     try:
-        res = subprocess.run(
-            cmd,
-            cwd=abs_path,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return f"Package '{package_name}' successfully uninstalled.\nOutput:\n{res.stdout}"
-    except subprocess.CalledProcessError as e:
-        return f"Uninstallation failed:\nExit Code: {e.returncode}\nError:\n{e.stderr}"
+        user_id = current_user_id.get() or "default"
+        sandbox = DockerSandboxManager(user_id)
+        res = sandbox.execute(cmd)
+        
+        output = f"Package '{package_name}' uninstallation completed.\n"
+        if res["stdout"]:
+            output += f"Stdout:\n{res['stdout']}\n"
+        if res["stderr"]:
+            output += f"Stderr:\n{res['stderr']}\n"
+        output += f"Exit Code: {res['exit_code']}\n"
+        if not res["sandboxed"]:
+            output += "[Note: Executed in host fallback environment]\n"
+            
+        return output
     except Exception as ex:
         return f"Error executing uninstallation: {str(ex)}"
-
 
 class PackageManagerAgent(BaseAgent):
     name = "package_manager"
@@ -242,7 +240,7 @@ class PackageManagerAgent(BaseAgent):
         try:
             response = executor.invoke({"query": query})
             result = response.get("output", str(response))
-            logger.info("Package manager task completed.")
+            logger.info("package manager task completed.")
             return result
         except Exception as e:
             logger.error(f"Package manager execution error: {e}")

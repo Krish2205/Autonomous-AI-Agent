@@ -81,16 +81,21 @@ GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
 
 # ── LLM Instances (shared across all agents) ───────────────────────
+from backend.core.analytics import AnalyticsCallbackHandler
+analytics_handler = AnalyticsCallbackHandler()
+
 llm = ChatGroq(
     model="llama-3.3-70b-versatile",
     temperature=0.3,
     groq_api_key=GROQ_API_KEY,
+    callbacks=[analytics_handler]
 )
 
 vision_llm = ChatGroq(
     model="meta-llama/llama-4-scout-17b-16e-instruct",
     temperature=0.1,
     groq_api_key=GROQ_API_KEY,
+    callbacks=[analytics_handler]
 )
 
 # ── Model Settings ──────────────────────────────────────────────────
