@@ -117,14 +117,24 @@ class DatabaseAgent(BaseAgent):
                 "1. If you are querying or inserting data and don't know the table structures, ALWAYS run `get_db_schema` first.\n"
                 "2. Formulate correct SQL queries. Use standard SQLite syntax.\n"
                 "3. Execute the query using the `execute_sql` tool.\n"
-                "4. Check the results and return the final answer. Present any data results as a clean markdown table."
+                "4. Check the results and return the final answer. Present any data results as a clean markdown table.\n"
+                "5. Self-Correction Loop: If execute_sql returns an error message starting with 'Error executing SQL:', "
+                "you MUST read the error details, analyze why it failed (such as invalid column names, table not found, "
+                "syntax errors, or type mismatches), formulate a corrected query, and execute it again. Continue "
+                "this correction loop until it succeeds. Do not output the database error to the user if you can fix it."
             ),
             ("human", "{query}"),
             ("placeholder", "{agent_scratchpad}"),
         ])
 
         agent = create_tool_calling_agent(llm=llm, tools=self.tools, prompt=prompt)
-        executor = AgentExecutor(agent=agent, tools=self.tools, verbose=False)
+        executor = AgentExecutor(
+            agent=agent,
+            tools=self.tools,
+            verbose=True,
+            max_iterations=5,
+            handle_parsing_errors=True
+        )
 
         try:
             response = executor.invoke({"query": query})
@@ -132,5 +142,5 @@ class DatabaseAgent(BaseAgent):
             logger.info("Database task completed successfully.")
             return result
         except Exception as e:
-            logger.error(f"Database agent failed: {e}")
+            logger.error(f"Database agent failed: {e}", exc_info=True)
             return f"Database error: {str(e)}"

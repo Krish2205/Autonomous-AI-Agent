@@ -138,14 +138,25 @@ class CodeAgent(BaseAgent):
                     "system",
                     "You are a brilliant software engineer. Use the secure sandbox tools to write, read, "
                     "list files, or execute Python code to complete your programming and analysis tasks. "
-                    "All operations and code execution run in an isolated local container sandbox workspace.",
+                    "All operations and code execution run in an isolated local container sandbox workspace.\n\n"
+                    "Self-Correction Guideline:\n"
+                    "If a script execution fails with an error (e.g. Stderr, Exit Code, or traceback exceptions), "
+                    "you MUST analyze the traceback details, diagnose the root cause (such as NameError, SyntaxError, "
+                    "ModuleNotFoundError, or IndexError), write corrected code, and execute it again using execute_python. "
+                    "Do not give up or report the error output to the user. Iterate and correct the code until it succeeds.",
                 ),
                 ("human", "{query}"),
                 ("placeholder", "{agent_scratchpad}"),
             ])
 
             agent = create_tool_calling_agent(llm=llm, tools=session_tools, prompt=prompt)
-            executor = AgentExecutor(agent=agent, tools=session_tools, verbose=False)
+            executor = AgentExecutor(
+                agent=agent,
+                tools=session_tools,
+                verbose=True,
+                max_iterations=5,
+                handle_parsing_errors=True
+            )
 
             response = executor.invoke({"query": query})
             result = response.get("output", str(response))
