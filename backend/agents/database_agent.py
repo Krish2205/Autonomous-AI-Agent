@@ -5,11 +5,14 @@ SQLite file operations for structured data creation, insertion, and querying.
 
 import sqlite3
 from langchain_core.tools import tool
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+try:
+    from langchain.agents import AgentExecutor, create_tool_calling_agent
+except ImportError:
+    from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
 
 from backend.agents.base import BaseAgent
-from backend.config import llm, DATABASE_PATH
+from backend.config import llm, get_user_database_path
 from backend.logger import get_logger
 
 logger = get_logger("agents.database")
@@ -23,7 +26,7 @@ def execute_sql(sql_query: str) -> str:
     """
     logger.info(f"Executing SQL query: {sql_query}")
     try:
-        conn = sqlite3.connect(DATABASE_PATH)
+        conn = sqlite3.connect(get_user_database_path())
         cursor = conn.cursor()
         cursor.execute(sql_query)
         
@@ -68,7 +71,7 @@ def get_db_schema() -> str:
     """
     logger.info("Retrieving database schema...")
     try:
-        conn = sqlite3.connect(DATABASE_PATH)
+        conn = sqlite3.connect(get_user_database_path())
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
         tables = cursor.fetchall()

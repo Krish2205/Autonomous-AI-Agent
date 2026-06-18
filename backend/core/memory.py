@@ -10,7 +10,16 @@ class ConversationMemory:
     def __init__(self, session_id: str):
         self.session_id = session_id
         self.messages: List[Dict[str, str]] = []
-        self.file_path = os.path.join(DATA_DIR, "sessions", f"{session_id}.json")
+        
+        # User scoping for multi-user session files
+        from backend.config import current_user_id
+        user_id = current_user_id.get()
+        if user_id:
+            safe_user_id = "".join(c for c in user_id if c.isalnum() or c in ("-", "_"))
+            self.file_path = os.path.join(DATA_DIR, "sessions", safe_user_id, f"{session_id}.json")
+        else:
+            self.file_path = os.path.join(DATA_DIR, "sessions", f"{session_id}.json")
+            
         os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
         self.load()
 

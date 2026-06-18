@@ -12,7 +12,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 
 from backend.agents.base import BaseAgent
-from backend.config import llm, GENERATED_IMAGES_DIR
+from backend.config import llm, GENERATED_IMAGES_DIR, get_user_image_filename, get_user_image_path
 from backend.logger import get_logger
 
 logger = get_logger("agents.image_gen")
@@ -69,7 +69,8 @@ class ImageGenAgent(BaseAgent):
         )
 
         filename = f"gen_{int(time.time())}.jpg"
-        save_path = os.path.join(GENERATED_IMAGES_DIR, filename)
+        user_filename = get_user_image_filename(filename)
+        save_path = get_user_image_path(filename)
 
         try:
             logger.info(f"Fetching image from Pollinations API...")
@@ -83,7 +84,7 @@ class ImageGenAgent(BaseAgent):
             logger.info(f"Successfully saved generated image to: {save_path}")
 
             # Return markdown-compatible image URL pointing to the FastAPI server mount
-            relative_url = f"/images/{filename}"
+            relative_url = f"/images/{user_filename}"
             result_message = (
                 f"🎨 **Image Generated Successfully!**\n\n"
                 f"* **Enhanced Prompt**: *{expanded_prompt}*\n"
