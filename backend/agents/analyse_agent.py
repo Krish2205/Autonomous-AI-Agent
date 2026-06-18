@@ -14,7 +14,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from backend.agents.base import BaseAgent
-from backend.config import llm, vision_llm, DOCUMENTS_DIR, FAISS_DIR, EMBEDDING_MODEL, FAISS_SEARCH_K, CHUNK_SIZE, CHUNK_OVERLAP
+from backend.config import llm, vision_llm, EMBEDDING_MODEL, FAISS_SEARCH_K, CHUNK_SIZE, CHUNK_OVERLAP, get_user_documents_dir, get_user_faiss_dir
 from backend.tools.document_loader import load_and_parse_file
 from backend.logger import get_logger
 
@@ -30,21 +30,27 @@ class AnalyseAgent(BaseAgent):
 
     def _build_vector_db(self) -> FAISS | None:
         """Scan the documents folder and build a FAISS vector index."""
-        logger.info("Scanning 'documents' folder to build database...")
+        docs_dir = get_user_documents_dir()
+        faiss_dir = get_user_faiss_dir()
+        
+        logger.info(f"Scanning documents folder '{docs_dir}' to build database...")
+        if not os.path.exists(docs_dir):
+            os.makedirs(docs_dir, exist_ok=True)
+            
         files = [
-            f for f in os.listdir(DOCUMENTS_DIR)
-            if os.path.isfile(os.path.join(DOCUMENTS_DIR, f))
+            f for f in os.listdir(docs_dir)
+            if os.path.isfile(os.path.join(docs_dir, f))
         ]
 
         if not files:
-            logger.warning("No files found in 'documents' folder.")
+            logger.warning(f"No files found in '{docs_dir}' folder.")
             return None
 
         all_texts = []
         metadata_list = []
 
         for filename in files:
-            file_path = os.path.join(DOCUMENTS_DIR, filename)
+            file_path = os.path.join(docs_dir, filename)
             logger.info(f"Parsing: {filename}...")
             try:
                 content = load_and_parse_file(file_path, vision_llm=vision_llm)
@@ -64,16 +70,20 @@ class AnalyseAgent(BaseAgent):
 
         logger.info(f"Creating embeddings and indexing {len(docs)} chunks...")
         db = FAISS.from_documents(docs, self._embeddings)
-        db.save_local(FAISS_DIR)
-        logger.info("Database built and saved successfully!")
+        db.save_local(faiss_dir)
+        logger.info(f"Database built and saved successfully to '{faiss_dir}'!")
         return db
 
     def _get_db(self) -> FAISS | None:
         """Load or build the FAISS database."""
-        if os.path.exists(FAISS_DIR) and os.listdir(FAISS_DIR):
-            return FAISS.load_local(
-                FAISS_DIR, self._embeddings, allow_dangerous_deserialization=True
-            )
+        faiss_dir = get_user_faiss_dir()
+        if os.path.exists(faiss_dir) and os.listdir(faiss_dir):
+            try:
+                return FAISS.load_local(
+                    faiss_dir, self._embeddings, allow_dangerous_deserialization=True
+                )
+            except Exception as e:
+                logger.error(f"Failed to load FAISS index from {faiss_dir}: {e}. Rebuilding...")
         return self._build_vector_db()
 
     def rebuild_index(self) -> None:

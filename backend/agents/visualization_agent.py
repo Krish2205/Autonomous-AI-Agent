@@ -15,7 +15,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 
 from backend.agents.base import BaseAgent
-from backend.config import llm, GENERATED_IMAGES_DIR
+from backend.config import llm, GENERATED_IMAGES_DIR, get_user_image_filename, get_user_image_path
 from backend.logger import get_logger
 
 logger = get_logger("agents.visualization")
@@ -78,7 +78,8 @@ class VisualizationAgent(BaseAgent):
 
         # Step 2: Render Matplotlib image as a fallback/static copy
         filename = f"chart_{int(time.time())}.png"
-        save_path = os.path.join(GENERATED_IMAGES_DIR, filename)
+        user_filename = get_user_image_filename(filename)
+        save_path = get_user_image_path(filename)
 
         try:
             # Set styled theme for matplotlib
@@ -148,7 +149,7 @@ class VisualizationAgent(BaseAgent):
         }
 
         # Step 4: Return dual-format output
-        relative_url = f"/images/{filename}" if save_path else None
+        relative_url = f"/images/{user_filename}" if save_path else None
         
         result_message = f"📊 **{title}**\n\n"
         result_message += f"Here is the visualization of your requested data:\n\n"

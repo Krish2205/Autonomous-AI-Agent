@@ -12,11 +12,14 @@ from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 
 from langchain_core.tools import tool
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+try:
+    from langchain.agents import AgentExecutor, create_tool_calling_agent
+except ImportError:
+    from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
 
 from backend.agents.base import BaseAgent
-from backend.config import GENERATED_IMAGES_DIR, llm
+from backend.config import GENERATED_IMAGES_DIR, llm, current_user_id
 from backend.logger import get_logger
 
 logger = get_logger("agents.maps")
@@ -187,11 +190,18 @@ def generate_map(start_address: str, end_address: str = "", map_name: str = "int
                         m.fit_bounds([[start_loc.latitude, start_loc.longitude], [end_loc.latitude, end_loc.longitude]])
 
         # Ensure directory exists and save
+        user_id = current_user_id.get()
+        if user_id:
+            safe_user_id = "".join(c for c in user_id if c.isalnum() or c in ("-", "_"))
+            file_name = f"{safe_user_id}_{map_name}.html"
+        else:
+            file_name = f"{map_name}.html"
+
         os.makedirs(GENERATED_IMAGES_DIR, exist_ok=True)
-        file_path = os.path.join(GENERATED_IMAGES_DIR, f"{map_name}.html")
+        file_path = os.path.join(GENERATED_IMAGES_DIR, file_name)
         m.save(file_path)
 
-        web_url = f"http://localhost:8000/images/{map_name}.html"
+        web_url = f"http://localhost:8000/images/{file_name}"
         return f"Interactive map successfully created!\n- Local File Path: {file_path}\n- Browser View URL: {web_url}"
     except Exception as e:
         logger.error(f"Failed to generate map: {e}")

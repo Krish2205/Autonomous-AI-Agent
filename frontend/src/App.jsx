@@ -7,6 +7,8 @@ import AgentPanel from './components/AgentPanel';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 import TypingIndicator from './components/TypingIndicator';
+import Login from './components/Login';
+import { supabase } from './supabaseClient';
 
 // ── Helpers ────────────────────────────────────────────────────────
 function generateId() {
@@ -24,7 +26,12 @@ function formatTime(date) {
 
 // ── Main App ───────────────────────────────────────────────────────
 export default function App() {
-  // State
+  // ── Authentication State ─────────────────────────────────────────
+  const [user, setUser] = useState(null);
+  const [sessionToken, setSessionToken] = useState(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
+
+  // ── UI / Chat State ──────────────────────────────────────────────
   const [conversations, setConversations] = useState([]);
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,9 +44,148 @@ export default function App() {
 
   const messagesEndRef = useRef(null);
 
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const savedUser = localStorage.getItem('jarvis_user');
+    const savedToken = localStorage.getItem('jarvis_token');
+    if (savedUser && savedToken) {
+      setUser(JSON.parse(savedUser));
+      setSessionToken(savedToken);
+    }
+  }, []);
+
+  // Listen to Supabase auth state changes if active
+  useEffect(() => {
+    if (!supabase) return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        handleAuthSuccess(session.user, session.access_token);
+      } else if (event === 'SIGNED_OUT') {
+        handleLogout();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load user conversation list from localStorage
+  useEffect(() => {
+    setHasLoaded(false);
+    if (user) {
+      const savedConvs = localStorage.getItem(`jarvis_conversations_${user.id}`);
+      if (savedConvs) {
+        try {
+          setConversations(JSON.parse(savedConvs));
+        } catch (e) {
+          console.error("Failed to parse conversations:", e);
+          setConversations([]);
+        }
+      } else {
+        setConversations([]);
+      }
+      setHasLoaded(true);
+    } else {
+      setConversations([]);
+    }
+  }, [user]);
+
+  // Sync conversation list metadata to localStorage
+  useEffect(() => {
+    if (!user || !hasLoaded) return;
+
+    if (conversations.length > 0) {
+      const metadata = conversations.map(c => ({
+        id: c.id,
+        title: c.title,
+        time: c.time,
+        createdAt: c.createdAt,
+        messages: [] // Empty messages to fetch dynamically on load/click
+      }));
+      localStorage.setItem(`jarvis_conversations_${user.id}`, JSON.stringify(metadata));
+    } else {
+      localStorage.removeItem(`jarvis_conversations_${user.id}`);
+    }
+  }, [conversations, user, hasLoaded]);
+
+  const handleAuthSuccess = (authUser, token) => {
+    setUser(authUser);
+    setSessionToken(token);
+    localStorage.setItem('jarvis_user', JSON.stringify(authUser));
+    localStorage.setItem('jarvis_token', token);
+  };
+
+  const handleLogout = useCallback(async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    setUser(null);
+    setSessionToken(null);
+    localStorage.removeItem('jarvis_user');
+    localStorage.removeItem('jarvis_token');
+    setConversations([]);
+    setActiveConversationId(null);
+    setHasLoaded(false);
+  }, []);
+
+  const handleDeleteActiveWorkspace = useCallback(async () => {
+    if (!user) return;
+    
+    const isCustomUser = !['developer', 'designer', 'manager', 'guest'].includes(user.id);
+    const workspaceName = user.user_metadata?.full_name || user.id;
+    
+    const message = isCustomUser 
+      ? `Are you sure you want to delete the custom workspace "${workspaceName}" and ALL of its conversation history, uploaded files, and databases? This action is permanent.`
+      : `Are you sure you want to clear ALL backend databases, files, and conversation history for the default workspace "${workspaceName}"? This action cannot be undone.`;
+
+    const confirmed = window.confirm(message);
+    if (!confirmed) return;
+
+    try {
+      // 1. Call backend to delete backend data
+      const res = await fetch(`/api/workspace/${user.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${sessionToken}`
+        }
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.detail || `Failed to delete backend data (status: ${res.status})`);
+      }
+
+      // 2. Clear frontend local storage for conversations of this workspace
+      localStorage.removeItem(`jarvis_conversations_${user.id}`);
+
+      // 3. If it is a custom workspace, remove it from list of custom workspaces
+      if (isCustomUser) {
+        const savedWorkspaces = localStorage.getItem('jarvis_custom_workspaces');
+        if (savedWorkspaces) {
+          try {
+            const list = JSON.parse(savedWorkspaces);
+            const updated = list.filter(w => w.id !== user.id);
+            localStorage.setItem('jarvis_custom_workspaces', JSON.stringify(updated));
+          } catch (e) {
+            console.error("Failed to update custom workspaces list:", e);
+          }
+        }
+      }
+
+      // 4. Trigger standard logout to reset UI state
+      await handleLogout();
+      
+      alert(`Workspace "${workspaceName}" has been successfully deleted.`);
+    } catch (err) {
+      alert(`Error deleting workspace: ${err.message}`);
+    }
+  }, [user, sessionToken, handleLogout]);
+
   // ── Real-Time Notification Stream (SSE) ──────────────────────
   useEffect(() => {
-    const eventSource = new EventSource('/api/notifications/stream');
+    if (!sessionToken) return;
+
+    const eventSource = new EventSource(`/api/notifications/stream?token=${encodeURIComponent(sessionToken)}`);
 
     eventSource.onmessage = (event) => {
       try {
@@ -56,10 +202,14 @@ export default function App() {
       }
     };
 
+    eventSource.onerror = (err) => {
+      console.error("SSE connection error:", err);
+    };
+
     return () => {
       eventSource.close();
     };
-  }, []);
+  }, [sessionToken]);
 
   // ── Current conversation ─────────────────────────────────────
   const activeConversation = conversations.find(c => c.id === activeConversationId);
@@ -69,7 +219,7 @@ export default function App() {
   const lastJarvisMessage = [...messages].reverse().find(msg => msg.role === 'jarvis');
   const activeAgents = lastJarvisMessage?.agentsUsed || [];
 
-  // ── Health check on mount ────────────────────────────────────
+  // ── Health check on mount / interval ──────────────────────────
   useEffect(() => {
     const checkHealth = async () => {
       try {
@@ -114,6 +264,7 @@ export default function App() {
 
   // ── Send message ─────────────────────────────────────────────
   const handleSend = useCallback(async (query) => {
+    if (!sessionToken) return;
     let convId = activeConversationId;
 
     // Auto-create conversation if none active
@@ -151,7 +302,10 @@ export default function App() {
     try {
       const response = await fetch('/api/query', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
         body: JSON.stringify({ query, session_id: convId }),
       });
 
@@ -177,8 +331,6 @@ export default function App() {
         return c;
       }));
 
-
-
     } catch (error) {
       const errorMessage = {
         id: generateId(),
@@ -196,10 +348,11 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeConversationId, createNewChat]);
+  }, [activeConversationId, createNewChat, sessionToken]);
 
   // ── Upload file ──────────────────────────────────────────────
   const handleUpload = useCallback(async (file) => {
+    if (!sessionToken) return;
     setIsUploading(true);
     let convId = activeConversationId;
 
@@ -214,6 +367,9 @@ export default function App() {
     try {
       const response = await fetch(`/api/upload?session_id=${convId}`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sessionToken}`
+        },
         body: formData,
       });
 
@@ -255,23 +411,59 @@ export default function App() {
     } finally {
       setIsUploading(false);
     }
-  }, [activeConversationId, createNewChat]);
+  }, [activeConversationId, createNewChat, sessionToken]);
 
   // ── Delete conversation ──────────────────────────────────────
-  const handleDeleteConversation = useCallback((id) => {
+  const handleDeleteConversation = useCallback(async (id) => {
+    if (sessionToken) {
+      try {
+        await fetch(`/api/session/${id}/clear`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+      } catch (e) {
+        console.error("Failed to clear session from backend:", e);
+      }
+    }
     setConversations(prev => prev.filter(c => c.id !== id));
     if (activeConversationId === id) {
       setActiveConversationId(null);
     }
-  }, [activeConversationId]);
+  }, [activeConversationId, sessionToken]);
 
-  // ── Select conversation ──────────────────────────────────────
-  const handleSelectConversation = useCallback((id) => {
+  // ── Select conversation & fetch history ──────────────────────
+  const handleSelectConversation = useCallback(async (id) => {
     setActiveConversationId(id);
     setSidebarOpen(false);
-  }, []);
 
-  // ── Render ───────────────────────────────────────────────────
+    // Fetch message history from backend dynamically
+    if (sessionToken) {
+      try {
+        const response = await fetch(`/api/session/${id}/history`, {
+          headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.history) {
+            setConversations(prev => prev.map(c => {
+              if (c.id === id) {
+                return { ...c, messages: data.history };
+              }
+              return c;
+            }));
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load conversation history:", e);
+      }
+    }
+  }, [sessionToken]);
+
+  // If user is not logged in, render the login interface
+  if (!sessionToken) {
+    return <Login onAuthSuccess={handleAuthSuccess} />;
+  }
+
   const showWelcome = !activeConversation || messages.length === 0;
 
   return (
@@ -320,6 +512,9 @@ export default function App() {
             version={version}
             sidebarOpen={sidebarOpen}
             onToggleSidebar={() => setSidebarOpen(prev => !prev)}
+            user={user}
+            onLogout={handleLogout}
+            onDeleteActiveWorkspace={handleDeleteActiveWorkspace}
           />
 
           <div className="chat-area">
