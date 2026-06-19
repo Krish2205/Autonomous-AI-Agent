@@ -218,49 +218,70 @@ def download_file(
     filename: str,
     current_user: str = Depends(get_current_user)
 ):
-    """Download or stream a file from the user's documents directory."""
+    """Download or stream a file from the user's documents directory or generated images directory."""
     docs_dir = get_user_documents_dir()
     # Sanitize filename
     safe_filename = os.path.basename(filename)
     file_path = os.path.join(docs_dir, safe_filename)
+    
     if not os.path.exists(file_path):
-         raise HTTPException(status_code=404, detail="File not found")
+        from backend.config import GENERATED_IMAGES_DIR
+        file_path = os.path.join(GENERATED_IMAGES_DIR, safe_filename)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="File not found")
+            
     return FileResponse(file_path)
 
 
 @app.get("/api/workspace/files")
 def list_workspace_files(current_user: str = Depends(get_current_user)):
-    """List all documents, audio, and databases in the user's workspace."""
+    """List all documents, audio, databases, and generated images in the user's workspace."""
     docs_dir = get_user_documents_dir()
-    if not os.path.exists(docs_dir):
-        return []
-        
     files_list = []
-    for f in os.listdir(docs_dir):
-        file_path = os.path.join(docs_dir, f)
-        if os.path.isfile(file_path):
-            stat = os.stat(file_path)
-            ext = os.path.splitext(f)[1].lower()
-            
-            # Map type category
-            if ext in (".mp3", ".wav", ".m4a"):
-                file_type = "audio"
-            elif ext in (".mp4", ".mov", ".webm", ".mkv", ".avi"):
-                file_type = "video"
-            elif ext in (".png", ".jpg", ".jpeg", ".gif"):
-                file_type = "image"
-            elif ext == ".db":
-                file_type = "database"
-            else:
-                file_type = "document"
+    
+    # 1. Read files from user's documents directory
+    if os.path.exists(docs_dir):
+        for f in os.listdir(docs_dir):
+            file_path = os.path.join(docs_dir, f)
+            if os.path.isfile(file_path):
+                stat = os.stat(file_path)
+                ext = os.path.splitext(f)[1].lower()
                 
-            files_list.append({
-                "filename": f,
-                "size": stat.st_size,
-                "type": file_type,
-                "modified": stat.st_mtime
-            })
-            
+                # Map type category
+                if ext in (".mp3", ".wav", ".m4a"):
+                    file_type = "audio"
+                elif ext in (".mp4", ".mov", ".webm", ".mkv", ".avi"):
+                    file_type = "video"
+                elif ext in (".png", ".jpg", ".jpeg", ".gif"):
+                    file_type = "image"
+                elif ext == ".db":
+                    file_type = "database"
+                else:
+                    file_type = "document"
+                    
+                files_list.append({
+                    "filename": f,
+                    "size": stat.st_size,
+                    "type": file_type,
+                    "modified": stat.st_mtime
+                })
+
+    # 2. Read user-scoped files from generated images directory
+    from backend.config import GENERATED_IMAGES_DIR
+    safe_user_id = "".join(c for c in current_user if c.isalnum() or c in ("-", "_"))
+    if os.path.exists(GENERATED_IMAGES_DIR):
+        for f in os.listdir(GENERATED_IMAGES_DIR):
+            if f.startswith(f"{safe_user_id}_"):
+                file_path = os.path.join(GENERATED_IMAGES_DIR, f)
+                if os.path.isfile(file_path):
+                    stat = os.stat(file_path)
+                    files_list.append({
+                        "filename": f,
+                        "size": stat.st_size,
+                        "type": "image",
+                        "modified": stat.st_mtime
+                    })
+                    
     # Sort files: most recently modified first
     files_list.sort(key=lambda x: x["modified"], reverse=True)
     return files_list
@@ -268,13 +289,18 @@ def list_workspace_files(current_user: str = Depends(get_current_user)):
 
 @app.delete("/api/workspace/files/{filename}")
 def delete_workspace_file(filename: str, current_user: str = Depends(get_current_user)):
-    """Delete a workspace file and rebuild the search index."""
+    """Delete a workspace file or generated image and rebuild the search index if applicable."""
     docs_dir = get_user_documents_dir()
     safe_filename = os.path.basename(filename)
     file_path = os.path.join(docs_dir, safe_filename)
     
+    in_generated_images = False
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
+        from backend.config import GENERATED_IMAGES_DIR
+        file_path = os.path.join(GENERATED_IMAGES_DIR, safe_filename)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="File not found")
+        in_generated_images = True
         
     try:
         os.remove(file_path)
@@ -283,14 +309,15 @@ def delete_workspace_file(filename: str, current_user: str = Depends(get_current
         logger.error(f"Failed to delete file {safe_filename}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
         
-    # Rebuild search index
-    try:
-        analyse_agent = registry.get("analyse")
-        if analyse_agent and hasattr(analyse_agent, "rebuild_index"):
-            analyse_agent.rebuild_index()
-            logger.info("FAISS vector database index successfully updated after file deletion.")
-    except Exception as e:
-        logger.warning(f"Could not rebuild search index after file deletion: {e}")
+    # Rebuild search index (only if it was a document from docs_dir)
+    if not in_generated_images:
+        try:
+            analyse_agent = registry.get("analyse")
+            if analyse_agent and hasattr(analyse_agent, "rebuild_index"):
+                analyse_agent.rebuild_index()
+                logger.info("FAISS vector database index successfully updated after file deletion.")
+        except Exception as e:
+            logger.warning(f"Could not rebuild search index after file deletion: {e}")
         
     return {"status": "success", "message": f"File '{safe_filename}' deleted successfully."}
 

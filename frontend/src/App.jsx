@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import ParticleBackground from './components/ParticleBackground';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
-import AgentPanel from './components/AgentPanel';
+import AgentsGrid from './components/AgentsGrid';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 import TypingIndicator from './components/TypingIndicator';
@@ -11,6 +11,7 @@ import Login from './components/Login';
 import { supabase } from './supabaseClient';
 import DevPanel from './components/DevPanel';
 import AgentBuilderPanel from './components/AgentBuilderPanel';
+import WorkspaceExplorer from './components/WorkspaceExplorer';
 
 // ── Helpers ────────────────────────────────────────────────────────
 function generateId() {
@@ -41,7 +42,8 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(false);
   const [agentCount, setAgentCount] = useState(0);
   const [version, setVersion] = useState('1.0.0');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 900);
+  const [activeTab, setActiveTab] = useState('chats'); // 'chats', 'search', 'images', 'videos', 'library'
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   const [isBuilderPanelOpen, setIsBuilderPanelOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -229,7 +231,7 @@ export default function App() {
   const messages = activeConversation?.messages || [];
   
   // Get active agents in the latest JARVIS response
-  const lastJarvisMessage = [...messages].reverse().find(msg => msg.role === 'jarvis');
+  const lastJarvisMessage = [...messages].reverse().find(msg => msg.role === 'jarvis' || msg.role === 'assistant');
   const activeAgents = lastJarvisMessage?.agentsUsed || [];
 
   const checkHealth = useCallback(async () => {
@@ -271,7 +273,9 @@ export default function App() {
     };
     setConversations(prev => [newConv, ...prev]);
     setActiveConversationId(newConv.id);
-    setSidebarOpen(false);
+    if (window.innerWidth <= 900) {
+      setSidebarOpen(false);
+    }
     return newConv.id;
   }, []);
 
@@ -528,7 +532,9 @@ export default function App() {
   // ── Select conversation & fetch history ──────────────────────
   const handleSelectConversation = useCallback(async (id) => {
     setActiveConversationId(id);
-    setSidebarOpen(false);
+    if (window.innerWidth <= 900) {
+      setSidebarOpen(false);
+    }
 
     // Fetch message history from backend dynamically
     if (sessionToken) {
@@ -599,6 +605,11 @@ export default function App() {
           onClose={() => setSidebarOpen(false)}
           sessionToken={sessionToken}
           onToast={handleToast}
+          onToggleSidebar={() => setSidebarOpen(prev => !prev)}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          onToggleDevPanel={() => setIsDevPanelOpen(true)}
+          onToggleBuilderPanel={() => setIsBuilderPanelOpen(true)}
         />
 
         <div className="main-area">
@@ -615,62 +626,80 @@ export default function App() {
             onToggleBuilderPanel={() => setIsBuilderPanelOpen(true)}
           />
 
-          <div className="chat-area">
-            {showWelcome ? (
-              <div className="welcome-container">
-                <div className="welcome-icon">🤖</div>
-                <h1 className="welcome-title">Welcome to JARVIS</h1>
-                <p className="welcome-subtitle">
-                  Your autonomous AI operating system. Ask me anything — I'll orchestrate
-                  specialized agents to search the web, analyze documents, write code,
-                  manage emails, and more.
-                </p>
-                <div className="prompt-chips">
-                  {[
-                    "🔍 Search for the latest AI breakthroughs",
-                    "📊 Analyze my uploaded documents",
-                    "💻 Write a Python web scraper",
-                    "📝 Summarize a research topic",
-                    "📧 Check my email inbox",
-                  ].map((prompt, i) => (
-                    <button
-                      key={i}
-                      className="prompt-chip"
-                      onClick={() => handleSend(prompt.replace(/^[^\s]+\s/, ''))}
-                      disabled={isLoading}
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="chat-messages" id="chat-messages">
-                {messages.map((msg) => (
-                  <ChatMessage
-                    key={msg.id}
-                    role={msg.role}
-                    content={msg.content}
-                    timestamp={msg.timestamp}
-                    sessionToken={sessionToken}
-                  />
-                ))}
-                {isLoading && <TypingIndicator />}
-                <div ref={messagesEndRef} />
-              </div>
+          <div className="chat-area" style={{ 
+            padding: (activeTab === 'images' || activeTab === 'videos' || activeTab === 'library' || activeTab === 'agents') ? '24px' : undefined,
+            overflowY: (activeTab === 'images' || activeTab === 'videos' || activeTab === 'library' || activeTab === 'agents') ? 'auto' : undefined
+          }}>
+            {(activeTab === 'chats' || activeTab === 'search') && (
+              <>
+                {showWelcome ? (
+                  <div className="welcome-container">
+                    <div className="welcome-icon">🤖</div>
+                    <h1 className="welcome-title">Welcome to JARVIS</h1>
+                    <p className="welcome-subtitle">
+                      Your autonomous AI operating system. Ask me anything — I'll orchestrate
+                      specialized agents to search the web, analyze documents, write code,
+                      manage emails, and more.
+                    </p>
+                    <div className="prompt-chips">
+                      {[
+                        "🔍 Search for the latest AI breakthroughs",
+                        "📊 Analyze my uploaded documents",
+                        "💻 Write a Python web scraper",
+                        "📝 Summarize a research topic",
+                        "📧 Check my email inbox",
+                      ].map((prompt, i) => (
+                        <button
+                          key={i}
+                          className="prompt-chip"
+                          onClick={() => handleSend(prompt.replace(/^[^\s]+\s/, ''))}
+                          disabled={isLoading}
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="chat-messages" id="chat-messages">
+                    {messages.map((msg, idx) => (
+                      <ChatMessage
+                        key={msg.id || `msg-${idx}`}
+                        role={msg.role === 'assistant' ? 'jarvis' : msg.role}
+                        content={msg.content}
+                        timestamp={msg.timestamp}
+                        sessionToken={sessionToken}
+                      />
+                    ))}
+                    {isLoading && <TypingIndicator />}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+
+                <ChatInput
+                  onSend={handleSend}
+                  onUpload={handleUpload}
+                  isLoading={isLoading}
+                  isUploading={isUploading}
+                  showSuggestions={false}
+                />
+              </>
             )}
 
-            <ChatInput
-              onSend={handleSend}
-              onUpload={handleUpload}
-              isLoading={isLoading}
-              isUploading={isUploading}
-              showSuggestions={false}
-            />
+            {activeTab === 'images' && (
+              <WorkspaceExplorer sessionToken={sessionToken} onToast={handleToast} filterType="image" />
+            )}
+            {activeTab === 'videos' && (
+              <WorkspaceExplorer sessionToken={sessionToken} onToast={handleToast} filterType="video" />
+            )}
+            {activeTab === 'library' && (
+              <WorkspaceExplorer sessionToken={sessionToken} onToast={handleToast} filterType="all" />
+            )}
+            {activeTab === 'agents' && (
+              <AgentsGrid activeAgents={activeAgents} />
+            )}
           </div>
         </div>
-
-        <AgentPanel activeAgents={activeAgents} />
       </div>
 
       {isDevPanelOpen && (
