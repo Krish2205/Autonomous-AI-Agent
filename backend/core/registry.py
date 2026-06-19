@@ -6,6 +6,12 @@ and the planner auto-discovers available targets.
 
 from backend.logger import get_logger
 from backend.agents.base import BaseAgent
+import os
+import sys
+import importlib
+import pkgutil
+import inspect
+from backend.config import PROJECT_ROOT
 
 logger = get_logger("registry")
 
@@ -69,6 +75,38 @@ class AgentRegistry:
         for name, agent in self._agents.items():
             lines.append(f"- '{name}': {agent.description}")
         return "\n".join(lines)
+
+    def scan_and_register_agents(self) -> None:
+        """
+        Dynamically scan the backend.agents directory and register any new subclasses of BaseAgent.
+        """
+        logger.info("Scanning for new agents in backend.agents...")
+        agents_dir = os.path.join(PROJECT_ROOT, "backend", "agents")
+        
+        # We need to ensure we can reload if it's already in sys.modules, but for newly created ones, 
+        # importlib.import_module is sufficient.
+        for _, module_name, _ in pkgutil.iter_modules([agents_dir]):
+            if module_name in ("base", "__init__"):
+                continue
+            try:
+                full_module_name = f"backend.agents.{module_name}"
+                # If it's already loaded, we might want to reload it, but `pkgutil` finds it.
+                # Just import or get the module.
+                if full_module_name in sys.modules:
+                    module = sys.modules[full_module_name]
+                    importlib.reload(module)
+                else:
+                    module = importlib.import_module(full_module_name)
+                    
+                for name, obj in inspect.getmembers(module, inspect.isclass):
+                    if issubclass(obj, BaseAgent) and obj is not BaseAgent:
+                        # Instantiate and register if not already registered (or overwrite if changed)
+                        agent_instance = obj()
+                        if agent_instance.name not in self._agents:
+                            self.register(agent_instance)
+                            
+            except Exception as e:
+                logger.error(f"Error scanning/registering module {module_name}: {e}")
 
     def __len__(self) -> int:
         return len(self._agents)

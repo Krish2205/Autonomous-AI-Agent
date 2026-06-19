@@ -560,6 +560,7 @@ export default function App() {
                     role={msg.role}
                     content={msg.content}
                     timestamp={msg.timestamp}
+                    sessionToken={sessionToken}
                   />
                 ))}
                 {isLoading && <TypingIndicator />}

@@ -26,7 +26,14 @@ class AnalyseAgent(BaseAgent):
     description = "Analyze local files, documents, images, PDFs, or query information stored in local documents and databases."
 
     def __init__(self):
-        self._embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        try:
+            self._embeddings = HuggingFaceEmbeddings(
+                model_name=EMBEDDING_MODEL,
+                model_kwargs={"local_files_only": True}
+            )
+        except Exception as e:
+            logger.warning(f"Could not load HuggingFaceEmbeddings offline: {e}. Falling back to online mode...")
+            self._embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
 
     def _build_vector_db(self) -> FAISS | None:
         """Scan the documents folder and build a FAISS vector index."""

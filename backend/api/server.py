@@ -9,7 +9,7 @@ import asyncio
 import requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Header, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 
 from fastapi.staticfiles import StaticFiles
@@ -71,27 +71,35 @@ def verify_supabase_token(token: str, supabase_url: str, supabase_anon_key: str)
         raise ValueError(f"Invalid token from Supabase: {response.text}")
 
 
-async def get_current_user(authorization: str = Header(None)) -> str:
+async def get_current_user(
+    authorization: str = Header(None),
+    token: str = Query(None)
+) -> str:
     """Dependency that extracts and verifies authorization tokens, setting ContextVars."""
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_anon_key = os.environ.get("SUPABASE_ANON_KEY")
 
+    # Extract token from header or query param
+    auth_token = None
+    if authorization and authorization.startswith("Bearer "):
+        auth_token = authorization.split(" ")[1]
+    elif token:
+        auth_token = token
+
     # Graceful degradation to Local Developer Mode if Supabase isn't configured
     if not supabase_url or not supabase_anon_key:
-        if authorization and authorization.startswith("Bearer "):
-            token = authorization.split(" ")[1]
-            current_user_id.set(token)
-            return token
+        if auth_token:
+            current_user_id.set(auth_token)
+            return auth_token
         current_user_id.set("default")
         return "default"
 
     # Enforce token if Supabase is active
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Missing or invalid authentication token")
 
-    token = authorization.split(" ")[1]
     try:
-        user_info = verify_supabase_token(token, supabase_url, supabase_anon_key)
+        user_info = verify_supabase_token(auth_token, supabase_url, supabase_anon_key)
         user_id = user_info.get("id")
         if not user_id:
             raise HTTPException(status_code=401, detail="User ID not found in token")
@@ -155,7 +163,7 @@ async def upload_file(
 
     # Validate file extension
     ext = file.filename.lower().rsplit(".", 1)[-1] if "." in file.filename else ""
-    allowed_extensions = {"txt", "md", "pdf", "docx", "pptx", "png", "jpg", "jpeg"}
+    allowed_extensions = {"txt", "md", "pdf", "docx", "pptx", "png", "jpg", "jpeg", "mp4", "mkv", "avi", "mov", "webm"}
     if ext not in allowed_extensions:
         raise HTTPException(
             status_code=400,
@@ -200,6 +208,21 @@ async def upload_file(
         "filename": file.filename,
         "message": f"File '{file.filename}' uploaded and indexed successfully."
     }
+
+
+@app.get("/api/download/{filename}")
+def download_file(
+    filename: str,
+    current_user: str = Depends(get_current_user)
+):
+    """Download or stream a file from the user's documents directory."""
+    docs_dir = get_user_documents_dir()
+    # Sanitize filename
+    safe_filename = os.path.basename(filename)
+    file_path = os.path.join(docs_dir, safe_filename)
+    if not os.path.exists(file_path):
+         raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
 
 
 @app.post("/api/query", response_model=QueryResponse)
