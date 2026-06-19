@@ -569,3 +569,168 @@ def get_analytics_history(current_user: str = Depends(get_current_user)):
         logger.error(f"Failed to fetch analytics history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ── Agent Builder / Management Endpoints ──────────────────────────────
+class AgentCodeRequest(BaseModel):
+    code: str
+
+
+class BuildAgentRequest(BaseModel):
+    prompt: str
+
+
+@app.get("/api/agents/code")
+def list_agent_files(current_user: str = Depends(get_current_user)):
+    """List all agent Python files in backend/agents directory."""
+    from backend.config import PROJECT_ROOT
+    import os
+    agents_dir = os.path.join(PROJECT_ROOT, "backend", "agents")
+    if not os.path.exists(agents_dir):
+        raise HTTPException(status_code=404, detail="Agents directory not found")
+    
+    files = os.listdir(agents_dir)
+    agent_files = []
+    for f in files:
+        if f.endswith(".py"):
+            path = os.path.join(agents_dir, f)
+            is_dynamic = f.endswith("_agent.py") and f != "agent_builder_agent.py"
+            agent_files.append({
+                "filename": f,
+                "name": f[:-9] if f.endswith("_agent.py") else f[:-3],
+                "size": os.path.getsize(path),
+                "is_dynamic": is_dynamic
+            })
+    return agent_files
+
+
+@app.get("/api/agents/code/{filename}")
+def get_agent_code(filename: str, current_user: str = Depends(get_current_user)):
+    """Get the source code of an agent file."""
+    from backend.config import PROJECT_ROOT
+    import os
+    # Sanitize filename
+    safe_filename = os.path.basename(filename)
+    if not safe_filename.endswith(".py") or ".." in safe_filename:
+        raise HTTPException(status_code=400, detail="Invalid agent file name")
+        
+    agents_dir = os.path.join(PROJECT_ROOT, "backend", "agents")
+    file_path = os.path.join(agents_dir, safe_filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"Agent file '{safe_filename}' not found")
+        
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            code = f.read()
+        return {"filename": safe_filename, "code": code}
+    except Exception as e:
+        logger.error(f"Failed to read agent file {safe_filename}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/agents/code/{filename}")
+def save_agent_code(filename: str, request: AgentCodeRequest, current_user: str = Depends(get_current_user)):
+    """Save code to an agent file after performing syntax and import validations."""
+    from backend.config import PROJECT_ROOT
+    import os
+    import sys
+    import subprocess
+    
+    # Sanitize filename
+    safe_filename = os.path.basename(filename)
+    if not safe_filename.endswith(".py") or ".." in safe_filename:
+        raise HTTPException(status_code=400, detail="Invalid agent file name")
+        
+    agents_dir = os.path.join(PROJECT_ROOT, "backend", "agents")
+    file_path = os.path.join(agents_dir, safe_filename)
+    
+    agent_module_name = safe_filename[:-3]
+    code = request.code
+    
+    # 1. Compile Check
+    try:
+        compile(code, safe_filename, "exec")
+    except SyntaxError as se:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Syntax Error: The python code is invalid:\n{str(se)}"
+        )
+        
+    # 2. Write and test validation, revert if fails
+    backup_code = None
+    file_existed = os.path.exists(file_path)
+    if file_existed:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                backup_code = f.read()
+        except Exception:
+            pass
+            
+    try:
+        os.makedirs(agents_dir, exist_ok=True)
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(code)
+            
+        # 3. Subprocess Import Check
+        cmd = [sys.executable, "-c", f"import sys; sys.path.insert(0, {repr(PROJECT_ROOT)}); import backend.agents.{agent_module_name}"]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        
+        if res.returncode != 0:
+            # Revert change
+            if file_existed and backup_code is not None:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(backup_code)
+            else:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    
+            raise HTTPException(
+                status_code=400,
+                detail=f"Import/Execution Error: Code compiles, but fails on execution initialization:\n{res.stderr}"
+            )
+            
+        # 4. Trigger Reload of package registry
+        import importlib
+        import backend.agents
+        importlib.reload(backend.agents)
+        registry._agents.clear()
+        for AgentClass in backend.agents.ALL_AGENTS:
+            registry.register(AgentClass())
+            
+        return {"status": "success", "message": f"Agent file '{safe_filename}' saved and dynamically registered."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Revert on other exceptions
+        if file_existed and backup_code is not None:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(backup_code)
+        else:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        raise HTTPException(status_code=500, detail=f"Failed to save agent code: {str(e)}")
+
+
+@app.post("/api/agents/build")
+def build_custom_agent(request: BuildAgentRequest, current_user: str = Depends(get_current_user)):
+    """Invoke the AgentBuilderAgent directly to construct a new agent."""
+    try:
+        builder = registry.get("agent_builder")
+        if not builder:
+            raise HTTPException(status_code=404, detail="Agent Builder Agent is not registered.")
+            
+        result = builder.run(request.prompt)
+        
+        # Reload package to register the new agent if it succeeded
+        if "Success" in result or "created" in result.lower() or "validated" in result.lower():
+            import importlib
+            import backend.agents
+            importlib.reload(backend.agents)
+            registry._agents.clear()
+            for AgentClass in backend.agents.ALL_AGENTS:
+                registry.register(AgentClass())
+                
+        return {"status": "success", "result": result}
+    except Exception as e:
+        logger.error(f"Dynamic agent build failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

@@ -10,6 +10,7 @@ import TypingIndicator from './components/TypingIndicator';
 import Login from './components/Login';
 import { supabase } from './supabaseClient';
 import DevPanel from './components/DevPanel';
+import AgentBuilderPanel from './components/AgentBuilderPanel';
 
 // ── Helpers ────────────────────────────────────────────────────────
 function generateId() {
@@ -42,6 +43,7 @@ export default function App() {
   const [version, setVersion] = useState('1.0.0');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
+  const [isBuilderPanelOpen, setIsBuilderPanelOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
 
   const messagesEndRef = useRef(null);
@@ -221,28 +223,28 @@ export default function App() {
   const lastJarvisMessage = [...messages].reverse().find(msg => msg.role === 'jarvis');
   const activeAgents = lastJarvisMessage?.agentsUsed || [];
 
-  // ── Health check on mount / interval ──────────────────────────
-  useEffect(() => {
-    const checkHealth = async () => {
-      try {
-        const res = await fetch('/api/health');
-        if (res.ok) {
-          const data = await res.json();
-          setIsOnline(true);
-          setAgentCount(data.agents_registered || 0);
-          setVersion(data.version || '1.0.0');
-        } else {
-          setIsOnline(false);
-        }
-      } catch {
+  const checkHealth = useCallback(async () => {
+    try {
+      const res = await fetch('/api/health');
+      if (res.ok) {
+        const data = await res.json();
+        setIsOnline(true);
+        setAgentCount(data.agents_registered || 0);
+        setVersion(data.version || '1.0.0');
+      } else {
         setIsOnline(false);
       }
-    };
+    } catch {
+      setIsOnline(false);
+    }
+  }, []);
 
+  // ── Health check on mount / interval ──────────────────────────
+  useEffect(() => {
     checkHealth();
     const interval = setInterval(checkHealth, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [checkHealth]);
 
   // ── Auto-scroll ──────────────────────────────────────────────
   useEffect(() => {
@@ -518,6 +520,7 @@ export default function App() {
             onLogout={handleLogout}
             onDeleteActiveWorkspace={handleDeleteActiveWorkspace}
             onToggleDevPanel={() => setIsDevPanelOpen(true)}
+            onToggleBuilderPanel={() => setIsBuilderPanelOpen(true)}
           />
 
           <div className="chat-area">
@@ -582,6 +585,14 @@ export default function App() {
           sessionToken={sessionToken}
           userId={user?.id}
           onClose={() => setIsDevPanelOpen(false)}
+        />
+      )}
+
+      {isBuilderPanelOpen && (
+        <AgentBuilderPanel
+          sessionToken={sessionToken}
+          onClose={() => setIsBuilderPanelOpen(false)}
+          onAgentReloaded={checkHealth}
         />
       )}
     </>
