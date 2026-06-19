@@ -7,14 +7,21 @@ Refactored from analyse.py.
 import os
 from functools import lru_cache
 
+import cohere
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.retrievers import BM25Retriever
+from langchain_classic.retrievers import EnsembleRetriever
 
 from backend.agents.base import BaseAgent
-from backend.config import llm, vision_llm, EMBEDDING_MODEL, FAISS_SEARCH_K, CHUNK_SIZE, CHUNK_OVERLAP, get_user_documents_dir, get_user_faiss_dir
+from backend.config import (
+    llm, vision_llm, EMBEDDING_MODEL, FAISS_SEARCH_K, CHUNK_SIZE, CHUNK_OVERLAP,
+    get_user_documents_dir, get_user_faiss_dir, COHERE_API_KEY, RERANK_TOP_N,
+    SEMANTIC_WEIGHT, KEYWORD_WEIGHT
+)
 from backend.tools.document_loader import load_and_parse_file
 from backend.logger import get_logger
 
@@ -105,15 +112,76 @@ class AnalyseAgent(BaseAgent):
         if not db:
             return "INFORMATION_NOT_AVAILABLE"
 
-        retriever = db.as_retriever(search_kwargs={"k": FAISS_SEARCH_K})
-        matched_docs = retriever.invoke(query)
+        # 1. Hybrid Search Setup
+        try:
+            # Extract all documents loaded in FAISS docstore to fit BM25Retriever
+            faiss_docs = list(db.docstore._dict.values())
+            if not faiss_docs:
+                logger.warning("No documents found in FAISS docstore. Falling back to semantic search.")
+                retriever = db.as_retriever(search_kwargs={"k": FAISS_SEARCH_K})
+                matched_docs = retriever.invoke(query)
+            else:
+                # We request a larger candidate pool from both retrievers to allow reranking to filter down
+                candidate_k = max(FAISS_SEARCH_K * 2, RERANK_TOP_N * 2)
+                
+                faiss_retriever = db.as_retriever(search_kwargs={"k": candidate_k})
+                bm25_retriever = BM25Retriever.from_documents(faiss_docs)
+                bm25_retriever.k = candidate_k
+                
+                logger.info("Initializing Hybrid Ensemble Retriever (FAISS + BM25)...")
+                ensemble_retriever = EnsembleRetriever(
+                    retrievers=[faiss_retriever, bm25_retriever],
+                    weights=[SEMANTIC_WEIGHT, KEYWORD_WEIGHT]
+                )
+                matched_docs = ensemble_retriever.invoke(query)
+        except Exception as e:
+            logger.error(f"Error initializing Hybrid Search: {e}. Falling back to standard semantic search.")
+            retriever = db.as_retriever(search_kwargs={"k": FAISS_SEARCH_K})
+            matched_docs = retriever.invoke(query)
 
         if not matched_docs:
             return "INFORMATION_NOT_AVAILABLE"
 
+        # 2. Cohere Reranking
+        final_docs = matched_docs
+        cohere_key = COHERE_API_KEY or os.environ.get("COHERE_API_KEY")
+        if cohere_key:
+            try:
+                logger.info("Initializing Cohere Rerank...")
+                co = cohere.Client(api_key=cohere_key)
+                # Prepare documents for cohere SDK (requires a list of strings)
+                doc_contents = [doc.page_content for doc in matched_docs]
+                
+                if doc_contents:
+                    # Run Cohere rerank using 'rerank-english-v3.0'
+                    rerank_response = co.rerank(
+                        model="rerank-english-v3.0",
+                        query=query,
+                        documents=doc_contents,
+                        top_n=RERANK_TOP_N
+                    )
+                    
+                    reranked_docs = []
+                    for result in rerank_response.results:
+                        idx = result.index
+                        score = result.relevance_score
+                        doc = matched_docs[idx]
+                        logger.info(f"Rerank match - Source: {doc.metadata.get('source')} | Score: {score:.4f}")
+                        reranked_docs.append(doc)
+                    
+                    if reranked_docs:
+                        final_docs = reranked_docs
+            except Exception as e:
+                logger.error(f"Error during Cohere reranking: {e}. Falling back to raw ensemble results.")
+                final_docs = matched_docs[:FAISS_SEARCH_K]
+        else:
+            logger.info("COHERE_API_KEY not configured. Skipping reranking stage.")
+            # If skipping reranking, limit final docs to FAISS_SEARCH_K
+            final_docs = matched_docs[:FAISS_SEARCH_K]
+
         context = "\n\n".join([
             f"Source: {doc.metadata.get('source')}\nContent: {doc.page_content}"
-            for doc in matched_docs
+            for doc in final_docs
         ])
 
         qa_prompt = ChatPromptTemplate.from_messages([
