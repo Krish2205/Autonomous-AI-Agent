@@ -1,3 +1,5 @@
+import WorkspaceExplorer from './WorkspaceExplorer';
+
 export default function Sidebar({
   conversations,
   activeConversationId,
@@ -6,6 +8,8 @@ export default function Sidebar({
   onDeleteConversation,
   isOpen,
   onClose,
+  sessionToken,
+  onToast,
 }) {
   return (
     <>
@@ -60,6 +64,10 @@ export default function Sidebar({
               </div>
             ))
           )}
+        </div>
+
+        <div className="sidebar-footer-explorer" style={{ padding: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', overflowY: 'auto' }}>
+          <WorkspaceExplorer sessionToken={sessionToken} onToast={onToast} />
         </div>
       </aside>
     </>

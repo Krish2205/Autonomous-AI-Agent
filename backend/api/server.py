@@ -114,12 +114,15 @@ async def get_current_user(
 class QueryRequest(BaseModel):
     query: str
     session_id: str = "default"
+    confirm_build: bool | None = None
 
 
 class QueryResponse(BaseModel):
     query: str
     response: str
     agents_used: list[str] | None = None
+    needs_builder_confirmation: bool | None = None
+    pending_builder_query: str | None = None
 
 
 class AgentInfo(BaseModel):
@@ -225,6 +228,73 @@ def download_file(
     return FileResponse(file_path)
 
 
+@app.get("/api/workspace/files")
+def list_workspace_files(current_user: str = Depends(get_current_user)):
+    """List all documents, audio, and databases in the user's workspace."""
+    docs_dir = get_user_documents_dir()
+    if not os.path.exists(docs_dir):
+        return []
+        
+    files_list = []
+    for f in os.listdir(docs_dir):
+        file_path = os.path.join(docs_dir, f)
+        if os.path.isfile(file_path):
+            stat = os.stat(file_path)
+            ext = os.path.splitext(f)[1].lower()
+            
+            # Map type category
+            if ext in (".mp3", ".wav", ".m4a"):
+                file_type = "audio"
+            elif ext in (".mp4", ".mov", ".webm", ".mkv", ".avi"):
+                file_type = "video"
+            elif ext in (".png", ".jpg", ".jpeg", ".gif"):
+                file_type = "image"
+            elif ext == ".db":
+                file_type = "database"
+            else:
+                file_type = "document"
+                
+            files_list.append({
+                "filename": f,
+                "size": stat.st_size,
+                "type": file_type,
+                "modified": stat.st_mtime
+            })
+            
+    # Sort files: most recently modified first
+    files_list.sort(key=lambda x: x["modified"], reverse=True)
+    return files_list
+
+
+@app.delete("/api/workspace/files/{filename}")
+def delete_workspace_file(filename: str, current_user: str = Depends(get_current_user)):
+    """Delete a workspace file and rebuild the search index."""
+    docs_dir = get_user_documents_dir()
+    safe_filename = os.path.basename(filename)
+    file_path = os.path.join(docs_dir, safe_filename)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    try:
+        os.remove(file_path)
+        logger.info(f"Deleted workspace file: {file_path}")
+    except Exception as e:
+        logger.error(f"Failed to delete file {safe_filename}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
+        
+    # Rebuild search index
+    try:
+        analyse_agent = registry.get("analyse")
+        if analyse_agent and hasattr(analyse_agent, "rebuild_index"):
+            analyse_agent.rebuild_index()
+            logger.info("FAISS vector database index successfully updated after file deletion.")
+    except Exception as e:
+        logger.warning(f"Could not rebuild search index after file deletion: {e}")
+        
+    return {"status": "success", "message": f"File '{safe_filename}' deleted successfully."}
+
+
 @app.post("/api/query", response_model=QueryResponse)
 def query(request: QueryRequest, current_user: str = Depends(get_current_user)):
     """Send a query to the JARVIS orchestrator under user context."""
@@ -233,11 +303,17 @@ def query(request: QueryRequest, current_user: str = Depends(get_current_user)):
 
     logger.info(f"API query received (user: {current_user}, session: {request.session_id}): {request.query[:80]}...")
     try:
-        result = orchestrator.run(request.query, session_id=request.session_id)
+        result = orchestrator.run(
+            request.query, 
+            session_id=request.session_id, 
+            confirm_build=request.confirm_build
+        )
         return QueryResponse(
             query=request.query,
             response=result["response"],
             agents_used=result["agents_used"],
+            needs_builder_confirmation=result.get("needs_builder_confirmation"),
+            pending_builder_query=result.get("pending_builder_query"),
         )
     except Exception as e:
         logger.error(f"API query failed: {e}")

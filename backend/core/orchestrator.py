@@ -65,12 +65,12 @@ class Orchestrator:
             logger.error(error_msg)
             return error_msg
 
-    def run(self, query: str, session_id: str = "default_session", max_steps: int = 5) -> dict:
+    def run(self, query: str, session_id: str = "default_session", max_steps: int = 5, confirm_build: bool | None = None) -> dict:
         """
         Main entry point. Takes a user query, runs a sequential planning loop,
         executes agents step-by-step, synthesizes, and returns the result.
         """
-        logger.info(f"Processing query: {query} (session: {session_id})")
+        logger.info(f"Processing query: {query} (session: {session_id}, confirm_build: {confirm_build})")
 
         # Set usage analytics context parameters
         current_session_id.set(session_id)
@@ -116,6 +116,27 @@ class Orchestrator:
             if not agent_name or not agent_query:
                 logger.warning("Planner action was run_agent but target/query was missing. Finishing.")
                 break
+
+            # Intercept agent_builder to check for confirmation
+            if agent_name == "agent_builder":
+                if confirm_build is None:
+                    logger.info("Builder Agent execution detected. Pausing for user confirmation.")
+                    # Return immediate confirmation request response
+                    return {
+                        "response": f"I need to create a new custom agent with capabilities: **{agent_query}**. Since this is a new agent, it will take about 15-30 seconds to compile, import, and test. Would you like to continue or abort?",
+                        "agents_used": list(agents_used),
+                        "needs_builder_confirmation": True,
+                        "pending_builder_query": agent_query
+                    }
+                elif confirm_build is False:
+                    logger.info("User aborted Builder Agent execution.")
+                    return {
+                        "response": "Agent creation was aborted by the user.",
+                        "agents_used": list(agents_used),
+                        "needs_builder_confirmation": False
+                    }
+                else:
+                    logger.info("User confirmed Builder Agent execution. Proceeding...")
 
             agents_used.add(agent_name)
             current_step_name.set(f"agent:{agent_name}")

@@ -45,6 +45,15 @@ export default function App() {
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   const [isBuilderPanelOpen, setIsBuilderPanelOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [pendingBuilder, setPendingBuilder] = useState(null);
+
+  const handleToast = useCallback((toast) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, ...toast }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 6000);
+  }, []);
 
   const messagesEndRef = useRef(null);
 
@@ -335,6 +344,10 @@ export default function App() {
         return c;
       }));
 
+      if (data.needs_builder_confirmation) {
+        setPendingBuilder({ query, session_id: convId });
+      }
+
     } catch (error) {
       const errorMessage = {
         id: generateId(),
@@ -353,6 +366,82 @@ export default function App() {
       setIsLoading(false);
     }
   }, [activeConversationId, createNewChat, sessionToken]);
+
+  const handleConfirmBuild = async (shouldBuild) => {
+    if (!pendingBuilder) return;
+    const { query, session_id } = pendingBuilder;
+    setPendingBuilder(null);
+    setIsLoading(true);
+
+    try {
+      // 1. If confirming, add a user message indicating yes
+      const confirmText = shouldBuild ? "Yes, continue building the agent." : "No, abort building.";
+      const confirmMsg = {
+        id: generateId(),
+        role: 'user',
+        content: confirmText,
+        timestamp: new Date().toISOString(),
+      };
+      
+      setConversations(prev => prev.map(c => {
+        if (c.id === session_id) {
+          return { ...c, messages: [...c.messages, confirmMsg] };
+        }
+        return c;
+      }));
+
+      // 2. Query with confirm_build flag
+      const response = await fetch('/api/query', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
+        body: JSON.stringify({ query, session_id, confirm_build: shouldBuild }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.detail || `Server error (${response.status})`);
+      }
+
+      const data = await response.json();
+
+      const jarvisMessage = {
+        id: generateId(),
+        role: 'jarvis',
+        content: data.response || 'No response received.',
+        agentsUsed: data.agents_used || [],
+        timestamp: new Date().toISOString(),
+      };
+
+      setConversations(prev => prev.map(c => {
+        if (c.id === session_id) {
+          return { ...c, messages: [...c.messages, jarvisMessage] };
+        }
+        return c;
+      }));
+
+      checkHealth();
+
+    } catch (error) {
+      const errorMessage = {
+        id: generateId(),
+        role: 'jarvis',
+        content: `**Error:** ${error.message}`,
+        timestamp: new Date().toISOString(),
+      };
+
+      setConversations(prev => prev.map(c => {
+        if (c.id === session_id) {
+          return { ...c, messages: [...c.messages, errorMessage] };
+        }
+        return c;
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // ── Upload file ──────────────────────────────────────────────
   const handleUpload = useCallback(async (file) => {
@@ -383,6 +472,7 @@ export default function App() {
       }
 
       const data = await response.json();
+      window.reloadWorkspaceFiles?.();
 
       const systemMessage = {
         id: generateId(),
@@ -507,6 +597,8 @@ export default function App() {
           onDeleteConversation={handleDeleteConversation}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          sessionToken={sessionToken}
+          onToast={handleToast}
         />
 
         <div className="main-area">
@@ -595,6 +687,77 @@ export default function App() {
           onClose={() => setIsBuilderPanelOpen(false)}
           onAgentReloaded={checkHealth}
         />
+      )}
+
+      {pendingBuilder && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'rgba(30, 30, 60, 0.85)',
+            border: '1px solid rgba(124, 58, 237, 0.4)',
+            borderRadius: '20px',
+            padding: '24px',
+            maxWidth: '500px',
+            width: '100%',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
+            color: '#e8eaff',
+            animation: 'fadeIn 0.3s ease-out'
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', fontWeight: 700, color: '#00d4ff' }}>
+              🔧 Create Custom Agent?
+            </h3>
+            <p style={{ margin: '0 0 20px 0', fontSize: '0.95rem', lineHeight: '1.5', color: '#b9bbdb' }}>
+              JARVIS needs to build a new custom agent module to handle your request. This will compile, import, and validate a new Python tool in the background, which typically takes 15-30 seconds.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => handleConfirmBuild(false)}
+                style={{
+                  background: 'rgba(244, 63, 94, 0.15)',
+                  border: '1px solid rgba(244, 63, 94, 0.3)',
+                  color: '#f43f5e',
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Abort
+              </button>
+              <button
+                onClick={() => handleConfirmBuild(true)}
+                style={{
+                  background: 'linear-gradient(135deg, #7c3aed, #00d4ff)',
+                  border: 'none',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 15px rgba(124, 58, 237, 0.3)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
