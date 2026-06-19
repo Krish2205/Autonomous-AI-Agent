@@ -76,6 +76,7 @@ def get_user_image_path(filename: str) -> str:
 # ── API Keys ────────────────────────────────────────────────────────
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
+COHERE_API_KEY = os.environ.get("COHERE_API_KEY")
 GMAIL_EMAIL = os.environ.get("GMAIL_EMAIL")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
@@ -101,5 +102,9 @@ vision_llm = ChatGroq(
 # ── Model Settings ──────────────────────────────────────────────────
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 FAISS_SEARCH_K = 4
+RERANK_TOP_N = 3
+SEMANTIC_WEIGHT = 0.6
+KEYWORD_WEIGHT = 0.4
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 150
+

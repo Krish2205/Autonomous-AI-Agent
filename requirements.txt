@@ -48,3 +48,7 @@ yfinance
 # Maps Agent
 geopy
 folium
+
+# Hybrid Search & Reranking
+rank_bm25
+cohere
