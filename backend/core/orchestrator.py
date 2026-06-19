@@ -10,6 +10,7 @@ from backend.core.registry import AgentRegistry
 from backend.core.planner import Planner, PlannerStep
 from backend.core.synthesizer import Synthesizer
 from backend.core.memory import ConversationMemory
+from backend.core.analytics import current_session_id, current_query_id, current_step_name
 from backend.logger import get_logger
 
 logger = get_logger("core.orchestrator")
@@ -38,10 +39,7 @@ class Orchestrator:
 
     def __init__(self, registry: AgentRegistry):
         self.registry = registry
-        self.planner = Planner(
-            agent_descriptions=registry.get_target_descriptions(),
-            valid_targets=registry.get_target_names(),
-        )
+        self.planner = Planner()
         self.synthesizer = Synthesizer()
 
     def _execute_task(self, agent_name: str, query: str) -> str:
@@ -67,12 +65,16 @@ class Orchestrator:
             logger.error(error_msg)
             return error_msg
 
-    def run(self, query: str, session_id: str = "default_session", max_steps: int = 5) -> dict:
+    def run(self, query: str, session_id: str = "default_session", max_steps: int = 5, confirm_build: bool | None = None) -> dict:
         """
         Main entry point. Takes a user query, runs a sequential planning loop,
         executes agents step-by-step, synthesizes, and returns the result.
         """
-        logger.info(f"Processing query: {query} (session: {session_id})")
+        logger.info(f"Processing query: {query} (session: {session_id}, confirm_build: {confirm_build})")
+
+        # Set usage analytics context parameters
+        current_session_id.set(session_id)
+        current_query_id.set(query)
 
         # Load conversation memory
         memory = ConversationMemory(session_id)
@@ -94,7 +96,14 @@ class Orchestrator:
             scratchpad = "\n".join(scratchpad_lines) if scratchpad_lines else "No steps taken yet."
 
             # Step 1: Ask planner what to do next
-            plan_step = self.planner.plan(query, chat_history=chat_history, scratchpad=scratchpad)
+            current_step_name.set(f"planner_step_{step_num}")
+            plan_step = self.planner.plan(
+                query=query, 
+                agent_descriptions=self.registry.get_target_descriptions(),
+                valid_targets=self.registry.get_target_names(),
+                chat_history=chat_history, 
+                scratchpad=scratchpad
+            )
 
             if plan_step.action == "finish":
                 logger.info("Planner decided to finish.")
@@ -108,8 +117,35 @@ class Orchestrator:
                 logger.warning("Planner action was run_agent but target/query was missing. Finishing.")
                 break
 
+            # Intercept agent_builder to check for confirmation
+            if agent_name == "agent_builder":
+                if confirm_build is None:
+                    logger.info("Builder Agent execution detected. Pausing for user confirmation.")
+                    # Return immediate confirmation request response
+                    return {
+                        "response": f"I need to create a new custom agent with capabilities: **{agent_query}**. Since this is a new agent, it will take about 15-30 seconds to compile, import, and test. Would you like to continue or abort?",
+                        "agents_used": list(agents_used),
+                        "needs_builder_confirmation": True,
+                        "pending_builder_query": agent_query
+                    }
+                elif confirm_build is False:
+                    logger.info("User aborted Builder Agent execution.")
+                    return {
+                        "response": "Agent creation was aborted by the user.",
+                        "agents_used": list(agents_used),
+                        "needs_builder_confirmation": False
+                    }
+                else:
+                    logger.info("User confirmed Builder Agent execution. Proceeding...")
+
             agents_used.add(agent_name)
+            current_step_name.set(f"agent:{agent_name}")
             result = self._execute_task(agent_name, agent_query)
+
+            # Zero-Touch dynamically reload registry if agent_builder was used
+            if agent_name == "agent_builder":
+                logger.info("Agent Builder ran. Scanning for new agents to register...")
+                self.registry.scan_and_register_agents()
 
             # Record step
             steps_taken.append({
@@ -134,6 +170,7 @@ class Orchestrator:
             combined_results = "No action steps were required."
 
         # Step 3: Synthesize (with history context)
+        current_step_name.set("synthesizer")
         final_response = self.synthesizer.synthesize(query, combined_results, chat_history=chat_history)
 
         # Step 4: Save turn to memory

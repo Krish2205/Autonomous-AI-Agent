@@ -1,4 +1,4 @@
-export default function Header({ isOnline, agentCount, version, sidebarOpen, onToggleSidebar }) {
+export default function Header({ isOnline, agentCount, version, sidebarOpen, onToggleSidebar, user, onLogout, onDeleteActiveWorkspace, onToggleDevPanel, onToggleBuilderPanel }) {
   return (
     <header className="header" id="jarvis-header">
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -23,6 +23,95 @@ export default function Header({ isOnline, agentCount, version, sidebarOpen, onT
       </div>
 
       <div className="header-status">
+        {user && (
+          <>
+            <button 
+              onClick={onToggleBuilderPanel}
+              style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                color: '#a78bfa',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                padding: '6px 12px',
+                borderRadius: '10px',
+                fontSize: '0.75rem',
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.2s',
+                marginRight: '8px'
+              }}
+              title="Open Meta-Agent Builder OS Control Panel"
+            >
+              <span>🤖</span> Builder
+            </button>
+            <button 
+              onClick={onToggleDevPanel}
+              style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                color: '#00d4ff',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                padding: '6px 12px',
+                borderRadius: '10px',
+                fontSize: '0.75rem',
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.2s'
+              }}
+              title="Open Developer & Webhook Hub"
+            >
+              <span>⚙️</span> Dev Hub
+            </button>
+            <div className="status-badge" style={{ background: 'rgba(124, 58, 237, 0.1)', borderColor: 'rgba(124, 58, 237, 0.25)', color: '#a78bfa', gap: '10px' }}>
+              <span style={{ fontSize: '0.9rem' }}>👤</span>
+              <span>{user.user_metadata?.full_name || user.email?.split('@')[0]}</span>
+              <button 
+                onClick={onLogout}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#f43f5e',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  marginLeft: '8px',
+                  fontSize: '0.75rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px'
+                }}
+                title="Sign Out"
+              >
+                Sign Out
+              </button>
+              <button 
+                onClick={onDeleteActiveWorkspace}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#ff4a6b',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  marginLeft: '12px',
+                  fontSize: '0.75rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  borderLeft: '1px solid rgba(255, 255, 255, 0.15)',
+                  paddingLeft: '12px'
+                }}
+                title="Delete active workspace and all its data"
+              >
+                Delete Workspace
+              </button>
+            </div>
+          </>
+        )}
         <div className={`status-badge ${isOnline ? '' : 'offline'}`}>
           <span className="status-dot" />
           {isOnline ? 'System Online' : 'Offline'}

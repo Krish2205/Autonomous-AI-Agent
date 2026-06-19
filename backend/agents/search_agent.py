@@ -5,7 +5,10 @@ Refactored from tavily.py.
 """
 
 from langchain_community.tools.tavily_search import TavilySearchResults as TavilySearch
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+try:
+    from langchain.agents import AgentExecutor, create_tool_calling_agent
+except ImportError:
+    from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
 
 from backend.agents.base import BaseAgent

@@ -6,7 +6,10 @@ Extracts clean, formatted body text from any given URL.
 import requests
 from bs4 import BeautifulSoup
 from langchain_core.tools import tool
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+try:
+    from langchain.agents import AgentExecutor, create_tool_calling_agent
+except ImportError:
+    from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
 
 from backend.agents.base import BaseAgent

@@ -7,6 +7,10 @@ import AgentPanel from './components/AgentPanel';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 import TypingIndicator from './components/TypingIndicator';
+import Login from './components/Login';
+import { supabase } from './supabaseClient';
+import DevPanel from './components/DevPanel';
+import AgentBuilderPanel from './components/AgentBuilderPanel';
 
 // ── Helpers ────────────────────────────────────────────────────────
 function generateId() {
@@ -24,7 +28,12 @@ function formatTime(date) {
 
 // ── Main App ───────────────────────────────────────────────────────
 export default function App() {
-  // State
+  // ── Authentication State ─────────────────────────────────────────
+  const [user, setUser] = useState(null);
+  const [sessionToken, setSessionToken] = useState(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
+
+  // ── UI / Chat State ──────────────────────────────────────────────
   const [conversations, setConversations] = useState([]);
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -33,8 +42,187 @@ export default function App() {
   const [agentCount, setAgentCount] = useState(0);
   const [version, setVersion] = useState('1.0.0');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
+  const [isBuilderPanelOpen, setIsBuilderPanelOpen] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [pendingBuilder, setPendingBuilder] = useState(null);
+
+  const handleToast = useCallback((toast) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, ...toast }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 6000);
+  }, []);
 
   const messagesEndRef = useRef(null);
+
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const savedUser = localStorage.getItem('jarvis_user');
+    const savedToken = localStorage.getItem('jarvis_token');
+    if (savedUser && savedToken) {
+      setUser(JSON.parse(savedUser));
+      setSessionToken(savedToken);
+    }
+  }, []);
+
+  // Listen to Supabase auth state changes if active
+  useEffect(() => {
+    if (!supabase) return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        handleAuthSuccess(session.user, session.access_token);
+      } else if (event === 'SIGNED_OUT') {
+        handleLogout();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load user conversation list from localStorage
+  useEffect(() => {
+    setHasLoaded(false);
+    if (user) {
+      const savedConvs = localStorage.getItem(`jarvis_conversations_${user.id}`);
+      if (savedConvs) {
+        try {
+          setConversations(JSON.parse(savedConvs));
+        } catch (e) {
+          console.error("Failed to parse conversations:", e);
+          setConversations([]);
+        }
+      } else {
+        setConversations([]);
+      }
+      setHasLoaded(true);
+    } else {
+      setConversations([]);
+    }
+  }, [user]);
+
+  // Sync conversation list metadata to localStorage
+  useEffect(() => {
+    if (!user || !hasLoaded) return;
+
+    if (conversations.length > 0) {
+      const metadata = conversations.map(c => ({
+        id: c.id,
+        title: c.title,
+        time: c.time,
+        createdAt: c.createdAt,
+        messages: [] // Empty messages to fetch dynamically on load/click
+      }));
+      localStorage.setItem(`jarvis_conversations_${user.id}`, JSON.stringify(metadata));
+    } else {
+      localStorage.removeItem(`jarvis_conversations_${user.id}`);
+    }
+  }, [conversations, user, hasLoaded]);
+
+  const handleAuthSuccess = (authUser, token) => {
+    setUser(authUser);
+    setSessionToken(token);
+    localStorage.setItem('jarvis_user', JSON.stringify(authUser));
+    localStorage.setItem('jarvis_token', token);
+  };
+
+  const handleLogout = useCallback(async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    setUser(null);
+    setSessionToken(null);
+    localStorage.removeItem('jarvis_user');
+    localStorage.removeItem('jarvis_token');
+    setConversations([]);
+    setActiveConversationId(null);
+    setHasLoaded(false);
+  }, []);
+
+  const handleDeleteActiveWorkspace = useCallback(async () => {
+    if (!user) return;
+    
+    const isCustomUser = !['developer', 'designer', 'manager', 'guest'].includes(user.id);
+    const workspaceName = user.user_metadata?.full_name || user.id;
+    
+    const message = isCustomUser 
+      ? `Are you sure you want to delete the custom workspace "${workspaceName}" and ALL of its conversation history, uploaded files, and databases? This action is permanent.`
+      : `Are you sure you want to clear ALL backend databases, files, and conversation history for the default workspace "${workspaceName}"? This action cannot be undone.`;
+
+    const confirmed = window.confirm(message);
+    if (!confirmed) return;
+
+    try {
+      // 1. Call backend to delete backend data
+      const res = await fetch(`/api/workspace/${user.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${sessionToken}`
+        }
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.detail || `Failed to delete backend data (status: ${res.status})`);
+      }
+
+      // 2. Clear frontend local storage for conversations of this workspace
+      localStorage.removeItem(`jarvis_conversations_${user.id}`);
+
+      // 3. If it is a custom workspace, remove it from list of custom workspaces
+      if (isCustomUser) {
+        const savedWorkspaces = localStorage.getItem('jarvis_custom_workspaces');
+        if (savedWorkspaces) {
+          try {
+            const list = JSON.parse(savedWorkspaces);
+            const updated = list.filter(w => w.id !== user.id);
+            localStorage.setItem('jarvis_custom_workspaces', JSON.stringify(updated));
+          } catch (e) {
+            console.error("Failed to update custom workspaces list:", e);
+          }
+        }
+      }
+
+      // 4. Trigger standard logout to reset UI state
+      await handleLogout();
+      
+      alert(`Workspace "${workspaceName}" has been successfully deleted.`);
+    } catch (err) {
+      alert(`Error deleting workspace: ${err.message}`);
+    }
+  }, [user, sessionToken, handleLogout]);
+
+  // ── Real-Time Notification Stream (SSE) ──────────────────────
+  useEffect(() => {
+    if (!sessionToken) return;
+
+    const eventSource = new EventSource(`/api/notifications/stream?token=${encodeURIComponent(sessionToken)}`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const id = Math.random().toString(36).substring(2, 9);
+        setToasts(prev => [...prev, { id, ...data }]);
+
+        // Auto-dismiss after 6 seconds
+        setTimeout(() => {
+          setToasts(prev => prev.filter(t => t.id !== id));
+        }, 6000);
+      } catch (err) {
+        console.error("Failed to parse incoming notification:", err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error("SSE connection error:", err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [sessionToken]);
 
   // ── Current conversation ─────────────────────────────────────
   const activeConversation = conversations.find(c => c.id === activeConversationId);
@@ -44,28 +232,28 @@ export default function App() {
   const lastJarvisMessage = [...messages].reverse().find(msg => msg.role === 'jarvis');
   const activeAgents = lastJarvisMessage?.agentsUsed || [];
 
-  // ── Health check on mount ────────────────────────────────────
-  useEffect(() => {
-    const checkHealth = async () => {
-      try {
-        const res = await fetch('/api/health');
-        if (res.ok) {
-          const data = await res.json();
-          setIsOnline(true);
-          setAgentCount(data.agents_registered || 0);
-          setVersion(data.version || '1.0.0');
-        } else {
-          setIsOnline(false);
-        }
-      } catch {
+  const checkHealth = useCallback(async () => {
+    try {
+      const res = await fetch('/api/health');
+      if (res.ok) {
+        const data = await res.json();
+        setIsOnline(true);
+        setAgentCount(data.agents_registered || 0);
+        setVersion(data.version || '1.0.0');
+      } else {
         setIsOnline(false);
       }
-    };
+    } catch {
+      setIsOnline(false);
+    }
+  }, []);
 
+  // ── Health check on mount / interval ──────────────────────────
+  useEffect(() => {
     checkHealth();
     const interval = setInterval(checkHealth, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [checkHealth]);
 
   // ── Auto-scroll ──────────────────────────────────────────────
   useEffect(() => {
@@ -89,6 +277,7 @@ export default function App() {
 
   // ── Send message ─────────────────────────────────────────────
   const handleSend = useCallback(async (query) => {
+    if (!sessionToken) return;
     let convId = activeConversationId;
 
     // Auto-create conversation if none active
@@ -126,7 +315,10 @@ export default function App() {
     try {
       const response = await fetch('/api/query', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
         body: JSON.stringify({ query, session_id: convId }),
       });
 
@@ -152,6 +344,10 @@ export default function App() {
         return c;
       }));
 
+      if (data.needs_builder_confirmation) {
+        setPendingBuilder({ query, session_id: convId });
+      }
+
     } catch (error) {
       const errorMessage = {
         id: generateId(),
@@ -169,10 +365,87 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeConversationId, createNewChat]);
+  }, [activeConversationId, createNewChat, sessionToken]);
+
+  const handleConfirmBuild = async (shouldBuild) => {
+    if (!pendingBuilder) return;
+    const { query, session_id } = pendingBuilder;
+    setPendingBuilder(null);
+    setIsLoading(true);
+
+    try {
+      // 1. If confirming, add a user message indicating yes
+      const confirmText = shouldBuild ? "Yes, continue building the agent." : "No, abort building.";
+      const confirmMsg = {
+        id: generateId(),
+        role: 'user',
+        content: confirmText,
+        timestamp: new Date().toISOString(),
+      };
+      
+      setConversations(prev => prev.map(c => {
+        if (c.id === session_id) {
+          return { ...c, messages: [...c.messages, confirmMsg] };
+        }
+        return c;
+      }));
+
+      // 2. Query with confirm_build flag
+      const response = await fetch('/api/query', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
+        body: JSON.stringify({ query, session_id, confirm_build: shouldBuild }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.detail || `Server error (${response.status})`);
+      }
+
+      const data = await response.json();
+
+      const jarvisMessage = {
+        id: generateId(),
+        role: 'jarvis',
+        content: data.response || 'No response received.',
+        agentsUsed: data.agents_used || [],
+        timestamp: new Date().toISOString(),
+      };
+
+      setConversations(prev => prev.map(c => {
+        if (c.id === session_id) {
+          return { ...c, messages: [...c.messages, jarvisMessage] };
+        }
+        return c;
+      }));
+
+      checkHealth();
+
+    } catch (error) {
+      const errorMessage = {
+        id: generateId(),
+        role: 'jarvis',
+        content: `**Error:** ${error.message}`,
+        timestamp: new Date().toISOString(),
+      };
+
+      setConversations(prev => prev.map(c => {
+        if (c.id === session_id) {
+          return { ...c, messages: [...c.messages, errorMessage] };
+        }
+        return c;
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // ── Upload file ──────────────────────────────────────────────
   const handleUpload = useCallback(async (file) => {
+    if (!sessionToken) return;
     setIsUploading(true);
     let convId = activeConversationId;
 
@@ -187,6 +460,9 @@ export default function App() {
     try {
       const response = await fetch(`/api/upload?session_id=${convId}`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sessionToken}`
+        },
         body: formData,
       });
 
@@ -196,6 +472,7 @@ export default function App() {
       }
 
       const data = await response.json();
+      window.reloadWorkspaceFiles?.();
 
       const systemMessage = {
         id: generateId(),
@@ -228,28 +505,88 @@ export default function App() {
     } finally {
       setIsUploading(false);
     }
-  }, [activeConversationId, createNewChat]);
+  }, [activeConversationId, createNewChat, sessionToken]);
 
   // ── Delete conversation ──────────────────────────────────────
-  const handleDeleteConversation = useCallback((id) => {
+  const handleDeleteConversation = useCallback(async (id) => {
+    if (sessionToken) {
+      try {
+        await fetch(`/api/session/${id}/clear`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+      } catch (e) {
+        console.error("Failed to clear session from backend:", e);
+      }
+    }
     setConversations(prev => prev.filter(c => c.id !== id));
     if (activeConversationId === id) {
       setActiveConversationId(null);
     }
-  }, [activeConversationId]);
+  }, [activeConversationId, sessionToken]);
 
-  // ── Select conversation ──────────────────────────────────────
-  const handleSelectConversation = useCallback((id) => {
+  // ── Select conversation & fetch history ──────────────────────
+  const handleSelectConversation = useCallback(async (id) => {
     setActiveConversationId(id);
     setSidebarOpen(false);
-  }, []);
 
-  // ── Render ───────────────────────────────────────────────────
+    // Fetch message history from backend dynamically
+    if (sessionToken) {
+      try {
+        const response = await fetch(`/api/session/${id}/history`, {
+          headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.history) {
+            setConversations(prev => prev.map(c => {
+              if (c.id === id) {
+                return { ...c, messages: data.history };
+              }
+              return c;
+            }));
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load conversation history:", e);
+      }
+    }
+  }, [sessionToken]);
+
+  // If user is not logged in, render the login interface
+  if (!sessionToken) {
+    return <Login onAuthSuccess={handleAuthSuccess} />;
+  }
+
   const showWelcome = !activeConversation || messages.length === 0;
 
   return (
     <>
       <ParticleBackground />
+
+      {/* Floating Toast Notification Container */}
+      <div className="toast-container">
+        {toasts.map(toast => (
+          <div key={toast.id} className={`toast-card ${toast.level}`}>
+            <div className="toast-header">
+              <span className="toast-icon">
+                {toast.level === 'success' && '✅'}
+                {toast.level === 'warning' && '⚠️'}
+                {toast.level === 'error' && '🚨'}
+                {toast.level === 'info' && 'ℹ️'}
+              </span>
+              <strong className="toast-title">{toast.title}</strong>
+              <button
+                className="toast-close"
+                onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+              >
+                &times;
+              </button>
+            </div>
+            <div className="toast-body">{toast.message}</div>
+          </div>
+        ))}
+      </div>
 
       <div className="app-layout">
         <Sidebar
@@ -260,6 +597,8 @@ export default function App() {
           onDeleteConversation={handleDeleteConversation}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          sessionToken={sessionToken}
+          onToast={handleToast}
         />
 
         <div className="main-area">
@@ -269,6 +608,11 @@ export default function App() {
             version={version}
             sidebarOpen={sidebarOpen}
             onToggleSidebar={() => setSidebarOpen(prev => !prev)}
+            user={user}
+            onLogout={handleLogout}
+            onDeleteActiveWorkspace={handleDeleteActiveWorkspace}
+            onToggleDevPanel={() => setIsDevPanelOpen(true)}
+            onToggleBuilderPanel={() => setIsBuilderPanelOpen(true)}
           />
 
           <div className="chat-area">
@@ -308,6 +652,7 @@ export default function App() {
                     role={msg.role}
                     content={msg.content}
                     timestamp={msg.timestamp}
+                    sessionToken={sessionToken}
                   />
                 ))}
                 {isLoading && <TypingIndicator />}
@@ -327,6 +672,93 @@ export default function App() {
 
         <AgentPanel activeAgents={activeAgents} />
       </div>
+
+      {isDevPanelOpen && (
+        <DevPanel
+          sessionToken={sessionToken}
+          userId={user?.id}
+          onClose={() => setIsDevPanelOpen(false)}
+        />
+      )}
+
+      {isBuilderPanelOpen && (
+        <AgentBuilderPanel
+          sessionToken={sessionToken}
+          onClose={() => setIsBuilderPanelOpen(false)}
+          onAgentReloaded={checkHealth}
+        />
+      )}
+
+      {pendingBuilder && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'rgba(30, 30, 60, 0.85)',
+            border: '1px solid rgba(124, 58, 237, 0.4)',
+            borderRadius: '20px',
+            padding: '24px',
+            maxWidth: '500px',
+            width: '100%',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
+            color: '#e8eaff',
+            animation: 'fadeIn 0.3s ease-out'
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', fontWeight: 700, color: '#00d4ff' }}>
+              🔧 Create Custom Agent?
+            </h3>
+            <p style={{ margin: '0 0 20px 0', fontSize: '0.95rem', lineHeight: '1.5', color: '#b9bbdb' }}>
+              JARVIS needs to build a new custom agent module to handle your request. This will compile, import, and validate a new Python tool in the background, which typically takes 15-30 seconds.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => handleConfirmBuild(false)}
+                style={{
+                  background: 'rgba(244, 63, 94, 0.15)',
+                  border: '1px solid rgba(244, 63, 94, 0.3)',
+                  color: '#f43f5e',
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Abort
+              </button>
+              <button
+                onClick={() => handleConfirmBuild(true)}
+                style={{
+                  background: 'linear-gradient(135deg, #7c3aed, #00d4ff)',
+                  border: 'none',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 15px rgba(124, 58, 237, 0.3)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

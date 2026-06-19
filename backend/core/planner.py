@@ -47,10 +47,7 @@ class Planner:
     Decides the next action to take based on history and current execution progress.
     """
 
-    def __init__(self, agent_descriptions: str, valid_targets: list[str]):
-        self.valid_targets = valid_targets
-        self.agent_descriptions = agent_descriptions
-
+    def __init__(self):
         self.prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
@@ -60,6 +57,7 @@ class Planner:
                 "{agent_descriptions}\n\n"
                 "Guidelines:\n"
                 "- Only select target agents from the available list above.\n"
+                "- If the user asks for a capability that you do not possess (i.e. no existing agent can handle it), you MUST use the 'agent_builder' agent to build a new agent that implements this capability. Do NOT choose 'finish' until the required capability is built and subsequently used to complete the user's task.\n"
                 "- If the user's request requires performing an action (e.g. sending/drafting an email, writing/updating code or files, searching), you MUST run the corresponding agent using 'run_agent'. Do not choose 'finish' until the action has actually been executed.\n"
                 "- Choose 'finish' ONLY when all requested actions are complete and you have all the information required to formulate the final response."
             ),
@@ -75,12 +73,12 @@ class Planner:
         planner_llm = llm.with_structured_output(PlannerStep)
         self.chain = self.prompt | planner_llm
 
-    def plan(self, query: str, chat_history: str = "", scratchpad: str = "") -> PlannerStep:
+    def plan(self, query: str, agent_descriptions: str, valid_targets: list[str], chat_history: str = "", scratchpad: str = "") -> PlannerStep:
         """Decide the next step to take."""
         logger.info(f"Planning next step for query: {query[:80]}...")
         try:
             step = self.chain.invoke({
-                "agent_descriptions": self.agent_descriptions,
+                "agent_descriptions": agent_descriptions,
                 "query": query,
                 "chat_history": chat_history,
                 "scratchpad": scratchpad,
@@ -88,7 +86,7 @@ class Planner:
             
             # Post-validation of target
             if step.action == "run_agent":
-                if not step.target or step.target.strip().lower() not in self.valid_targets:
+                if not step.target or step.target.strip().lower() not in valid_targets:
                     logger.warning(f"Planner suggested invalid target '{step.target}'. Forcing finish.")
                     step.action = "finish"
                     step.target = ""

@@ -99,6 +99,98 @@ def load_and_parse_file(file_path: str, vision_llm=None) -> str:
         response = vision_llm.invoke(prompt)
         return response.content
 
+    elif ext in ("mp4", "mkv", "avi", "mov", "webm"):
+        if not vision_llm:
+            logger.warning("No vision LLM provided for video parsing.")
+            return "[Video file — vision LLM required for extraction]"
+
+        import cv2
+        cap = cv2.VideoCapture(file_path)
+        if not cap.isOpened():
+            logger.error(f"Failed to open video: {file_path}")
+            return "[Error opening video file]"
+
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = total_frames / fps if fps > 0 else 0
+        logger.info(f"Video details: {fps} FPS, {total_frames} total frames, duration: {duration:.2f}s")
+
+        num_frames_to_extract = min(10, total_frames) if total_frames > 0 else 0
+        if num_frames_to_extract == 0:
+            cap.release()
+            return "[Video contains no frames]"
+
+        indices = [int(i * total_frames / num_frames_to_extract) for i in range(num_frames_to_extract)]
+        frame_descriptions = []
+
+        for idx, frame_idx in enumerate(indices):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = cap.read()
+            if not ret:
+                continue
+            
+            timestamp_sec = frame_idx / fps if fps > 0 else 0
+            timestamp_str = f"{int(timestamp_sec // 60):02d}:{int(timestamp_sec % 60):02d}"
+
+            h, w = frame.shape[:2]
+            max_size = 640
+            if max(h, w) > max_size:
+                scale = max_size / max(h, w)
+                frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+
+            success, buffer = cv2.imencode('.jpg', frame)
+            if not success:
+                continue
+            
+            base64_image = base64.b64encode(buffer).decode("utf-8")
+            
+            prompt = [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"This is a frame at timestamp {timestamp_str} from an uploaded video. Briefly describe what is visible in this frame, focusing on actions, text, objects, and setting.",
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                        },
+                    ],
+                }
+            ]
+            try:
+                response = vision_llm.invoke(prompt)
+                frame_desc = response.content.strip()
+                frame_descriptions.append(f"At {timestamp_str}: {frame_desc}")
+                logger.info(f"Analyzed frame at {timestamp_str}")
+            except Exception as e:
+                logger.error(f"Error analyzing frame at {timestamp_str}: {e}")
+
+        cap.release()
+
+        if not frame_descriptions:
+            return "[Video parsing failed to extract/analyze any frames]"
+
+        from backend.config import llm
+        
+        full_timeline = "\n".join(frame_descriptions)
+        summary_prompt = (
+            f"You are analyzing a video's visual timeline. Below are the descriptions of key frames extracted from the video:\n\n"
+            f"{full_timeline}\n\n"
+            f"Please synthesize these frame descriptions into a detailed, coherent summary of the video. "
+            f"Include the general topic/theme, the progression of events/actions over time, and any key text or objects observed. "
+            f"Keep it structured and descriptive for database search indexing."
+        )
+        
+        try:
+            summary_response = llm.invoke(summary_prompt)
+            video_summary = summary_response.content.strip()
+            return f"Video Title/Source: {os.path.basename(file_path)}\n\n--- VIDEO SUMMARY ---\n{video_summary}\n\n--- DETAILED TIMELINE ---\n{full_timeline}"
+        except Exception as e:
+            logger.error(f"Failed to generate summary: {e}")
+            return f"Video Title/Source: {os.path.basename(file_path)}\n\n--- DETAILED TIMELINE ---\n{full_timeline}"
+
     else:
         logger.warning(f"Unsupported file type: .{ext}")
         return ""
