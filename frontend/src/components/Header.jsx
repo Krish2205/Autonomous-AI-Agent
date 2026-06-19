@@ -1,129 +1,60 @@
 export default function Header({ isOnline, agentCount, version, sidebarOpen, onToggleSidebar, user, onLogout, onDeleteActiveWorkspace, onToggleDevPanel, onToggleBuilderPanel }) {
   return (
     <header className="header" id="jarvis-header">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <button
-          className="sidebar-toggle"
-          onClick={onToggleSidebar}
-          aria-label="Toggle sidebar"
-        >
-          {sidebarOpen ? '✕' : '☰'}
-        </button>
-
-        <div className="header-brand">
-          <div className="header-logo">
-            <div className="header-logo-ring" />
-            <div className="header-logo-core" />
-          </div>
-          <div>
-            <div className="header-title">JARVIS</div>
-            <div className="header-subtitle">Autonomous AI Operating System</div>
-          </div>
-        </div>
+      <div className="header-left">
+        <span style={{ 
+          fontSize: '0.9rem', 
+          fontWeight: 800, 
+          letterSpacing: '2px', 
+          background: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-violet))', 
+          WebkitBackgroundClip: 'text', 
+          WebkitTextFillColor: 'transparent',
+          textTransform: 'uppercase'
+        }}>
+          Multi-Agent AI System
+        </span>
       </div>
 
-      <div className="header-status">
+      <div className="header-center">
+      </div>
+
+      <div className="header-right">
         {user && (
-          <>
-            <button 
-              onClick={onToggleBuilderPanel}
-              style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                color: '#a78bfa',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-                padding: '6px 12px',
-                borderRadius: '10px',
-                fontSize: '0.75rem',
-                textTransform: 'uppercase',
-                letterSpacing: '1px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: 'all 0.2s',
-                marginRight: '8px'
-              }}
-              title="Open Meta-Agent Builder OS Control Panel"
-            >
-              <span>🤖</span> Builder
-            </button>
-            <button 
-              onClick={onToggleDevPanel}
-              style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                color: '#00d4ff',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-                padding: '6px 12px',
-                borderRadius: '10px',
-                fontSize: '0.75rem',
-                textTransform: 'uppercase',
-                letterSpacing: '1px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: 'all 0.2s'
-              }}
-              title="Open Developer & Webhook Hub"
-            >
-              <span>⚙️</span> Dev Hub
-            </button>
-            <div className="status-badge" style={{ background: 'rgba(124, 58, 237, 0.1)', borderColor: 'rgba(124, 58, 237, 0.25)', color: '#a78bfa', gap: '10px' }}>
-              <span style={{ fontSize: '0.9rem' }}>👤</span>
-              <span>{user.user_metadata?.full_name || user.email?.split('@')[0]}</span>
+          <div className="header-user-section">
+            <div className="user-profile-pill">
+              <span className="user-avatar-icon">👤</span>
+              <span className="user-name">{user.user_metadata?.full_name || user.email?.split('@')[0]}</span>
+            </div>
+            
+            <div className="user-actions">
               <button 
+                className="user-action-btn btn-logout"
                 onClick={onLogout}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#f43f5e',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  marginLeft: '8px',
-                  fontSize: '0.75rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px'
-                }}
                 title="Sign Out"
               >
                 Sign Out
               </button>
               <button 
+                className="user-action-btn btn-delete-ws"
                 onClick={onDeleteActiveWorkspace}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#ff4a6b',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  marginLeft: '12px',
-                  fontSize: '0.75rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
-                  borderLeft: '1px solid rgba(255, 255, 255, 0.15)',
-                  paddingLeft: '12px'
-                }}
                 title="Delete active workspace and all its data"
               >
                 Delete Workspace
               </button>
             </div>
-          </>
-        )}
-        <div className={`status-badge ${isOnline ? '' : 'offline'}`}>
-          <span className="status-dot" />
-          {isOnline ? 'System Online' : 'Offline'}
-        </div>
-        {agentCount > 0 && (
-          <div className="status-badge">
-            <span style={{ fontSize: '0.7rem' }}>⚡</span>
-            {agentCount} Agents
           </div>
         )}
-        <span className="version-badge">v{version || '1.0.0'}</span>
+
+        <div className="header-status-badges">
+          {!isOnline && (
+            <div className="status-badge offline">
+              <span className="status-dot" />
+              <span className="badge-text">Offline</span>
+            </div>
+          )}
+        </div>
       </div>
+      {isOnline && <div className="header-active-line" />}
     </header>
   );
 }

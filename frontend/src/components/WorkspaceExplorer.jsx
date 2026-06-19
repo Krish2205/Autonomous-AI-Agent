@@ -9,7 +9,7 @@ function formatBytes(bytes, decimals = 2) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-export default function WorkspaceExplorer({ sessionToken, onToast }) {
+export default function WorkspaceExplorer({ sessionToken, onToast, filterType = 'all' }) {
   const [files, setFiles] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -127,11 +127,16 @@ export default function WorkspaceExplorer({ sessionToken, onToast }) {
     return `/api/download/${encodeURIComponent(filename)}?token=${encodeURIComponent(sessionToken)}`;
   };
 
+  const filteredFiles = files.filter(f => {
+    if (filterType === 'all') return true;
+    return f.type === filterType;
+  });
+
   return (
-    <div className="workspace-explorer-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '4px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <span style={{ fontSize: '0.8rem', textTransform: 'uppercase', tracking: '1px', fontWeight: 650, color: 'var(--text-secondary, #8b8fad)' }}>
-          Workspace Explorer
+    <div className="workspace-explorer-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', padding: '0 4px' }}>
+        <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 700, color: 'var(--text-tertiary)' }}>
+          {filterType === 'all' ? 'Library Files' : `${filterType}s`} ({filteredFiles.length})
         </span>
         <button
           onClick={fetchFiles}
@@ -139,16 +144,16 @@ export default function WorkspaceExplorer({ sessionToken, onToast }) {
           style={{
             background: 'none',
             border: 'none',
-            color: '#00d4ff',
+            color: 'var(--text-tertiary)',
             cursor: 'pointer',
             padding: '2px',
             display: 'flex',
             alignItems: 'center',
             opacity: isLoading ? 0.5 : 1
           }}
-          title="Refresh file explorer"
+          title="Refresh library"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px', animation: isLoading ? 'spin 1s linear infinite' : 'none' }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '12px', height: '12px', animation: isLoading ? 'spin 1s linear infinite' : 'none' }}>
             <path d="M23 4v6h-6" />
             <path d="M1 20v-6h6" />
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -156,43 +161,42 @@ export default function WorkspaceExplorer({ sessionToken, onToast }) {
         </button>
       </div>
 
-      {files.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '24px 8px', color: '#555876', fontSize: '0.85rem', background: 'rgba(0,0,0,0.15)', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.05)' }}>
-          {isLoading ? "Loading files..." : "No files uploaded yet. Drag/upload files using the clip icon in chat!"}
+      {filteredFiles.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '24px 8px', color: '#555876', fontSize: '0.8rem', background: 'rgba(0,0,0,0.15)', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.03)' }}>
+          {isLoading ? "Loading..." : `No ${filterType === 'all' ? 'files' : filterType + 's'} found.`}
         </div>
       ) : (
         <div 
           style={{ 
             display: 'flex', 
             flexDirection: 'column', 
-            gap: '8px', 
-            maxHeight: '300px', 
+            gap: '6px', 
+            maxHeight: '100%', 
             overflowY: 'auto',
-            paddingRight: '4px'
           }}
           className="explorer-scroll-container"
         >
-          {files.map((file) => (
+          {filteredFiles.map((file) => (
             <div
               key={file.filename}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '10px 12px',
-                background: 'rgba(255, 255, 255, 0.02)',
-                border: '1px solid rgba(255, 255, 255, 0.04)',
-                borderRadius: '10px',
+                padding: '8px 12px',
+                background: 'rgba(255, 255, 255, 0.01)',
+                border: '1px solid rgba(255, 255, 255, 0.03)',
+                borderRadius: '8px',
                 transition: 'all 0.2s ease',
                 gap: '8px'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                e.currentTarget.style.borderColor = 'rgba(124, 58, 237, 0.25)';
+                e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)';
+                e.currentTarget.style.background = 'rgba(255,255,255,0.01)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.03)';
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
@@ -203,9 +207,9 @@ export default function WorkspaceExplorer({ sessionToken, onToast }) {
                   <a
                     href={getDownloadUrl(file.filename)}
                     download={file.filename}
-                    title={`Click to download ${file.filename}`}
+                    title={file.filename}
                     style={{
-                      fontSize: '0.85rem',
+                      fontSize: '0.8rem',
                       fontWeight: '500',
                       color: '#e8eaff',
                       textDecoration: 'none',
@@ -214,18 +218,16 @@ export default function WorkspaceExplorer({ sessionToken, onToast }) {
                       whiteSpace: 'nowrap',
                       display: 'block'
                     }}
-                    onMouseEnter={(e) => e.target.style.color = '#00d4ff'}
-                    onMouseLeave={(e) => e.target.style.color = '#e8eaff'}
                   >
                     {file.filename}
                   </a>
-                  <span style={{ fontSize: '0.7rem', color: '#8b8fad' }}>
+                  <span style={{ fontSize: '0.65rem', color: '#64748b' }}>
                     {formatBytes(file.size)}
                   </span>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
                 {/* Download Button */}
                 <a
                   href={getDownloadUrl(file.filename)}
@@ -233,18 +235,16 @@ export default function WorkspaceExplorer({ sessionToken, onToast }) {
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: '#8b8fad',
+                    color: '#64748b',
                     cursor: 'pointer',
-                    padding: '4px',
+                    padding: '3px',
                     borderRadius: '4px',
                     display: 'flex',
                     alignItems: 'center'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#00d4ff'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#8b8fad'}
                   title="Download"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '12px', height: '12px' }}>
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="7 10 12 15 17 10" />
                     <line x1="12" y1="15" x2="12" y2="3" />
@@ -257,22 +257,18 @@ export default function WorkspaceExplorer({ sessionToken, onToast }) {
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: '#8b8fad',
+                    color: '#64748b',
                     cursor: 'pointer',
-                    padding: '4px',
+                    padding: '3px',
                     borderRadius: '4px',
                     display: 'flex',
                     alignItems: 'center'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#f43f5e'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#8b8fad'}
                   title="Delete file"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '12px', height: '12px' }}>
                     <polyline points="3 6 5 6 21 6" />
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    <line x1="10" y1="11" x2="10" y2="17" />
-                    <line x1="14" y1="11" x2="14" y2="17" />
                   </svg>
                 </button>
               </div>
