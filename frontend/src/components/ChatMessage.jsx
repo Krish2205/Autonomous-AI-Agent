@@ -34,7 +34,7 @@ function formatTimestamp(ts) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function parseMarkdown(text) {
+function parseMarkdown(text, sessionToken) {
   if (!text) return '';
 
   // Split by code blocks first
@@ -64,11 +64,11 @@ function parseMarkdown(text) {
     }
 
     // Process inline formatting
-    return <span key={i}>{formatInline(part)}</span>;
+    return <span key={i}>{formatInline(part, sessionToken)}</span>;
   });
 }
 
-function formatInline(text) {
+function formatInline(text, sessionToken) {
   const lines = text.split('\n');
   const result = [];
   let inList = false;
@@ -90,7 +90,7 @@ function formatInline(text) {
     if (/^[-*•]\s+/.test(trimmed)) {
       inList = true;
       const content = trimmed.replace(/^[-*•]\s+/, '');
-      listItems.push(<li key={`li-${i}`}>{applyInlineStyles(content)}</li>);
+      listItems.push(<li key={`li-${i}`}>{applyInlineStyles(content, sessionToken)}</li>);
       continue;
     }
 
@@ -98,7 +98,7 @@ function formatInline(text) {
     if (/^\d+[.)]\s+/.test(trimmed)) {
       inList = true;
       const content = trimmed.replace(/^\d+[.)]\s+/, '');
-      listItems.push(<li key={`li-${i}`}>{applyInlineStyles(content)}</li>);
+      listItems.push(<li key={`li-${i}`}>{applyInlineStyles(content, sessionToken)}</li>);
       continue;
     }
 
@@ -109,7 +109,7 @@ function formatInline(text) {
       const content = trimmed.replace(/^#{1,3}\s+/, '');
       result.push(
         <p key={`h-${i}`} style={{ fontWeight: 700, marginTop: '12px' }}>
-          {applyInlineStyles(content)}
+          {applyInlineStyles(content, sessionToken)}
         </p>
       );
       continue;
@@ -121,14 +121,14 @@ function formatInline(text) {
     }
 
     // Regular paragraph
-    result.push(<p key={`p-${i}`}>{applyInlineStyles(trimmed)}</p>);
+    result.push(<p key={`p-${i}`}>{applyInlineStyles(trimmed, sessionToken)}</p>);
   }
 
   flushList();
   return result;
 }
 
-function applyInlineStyles(text) {
+function applyInlineStyles(text, sessionToken) {
   // Split by inline code, bold, and italic patterns
   const parts = [];
   let remaining = text;
@@ -141,6 +141,8 @@ function applyInlineStyles(text) {
     const boldMatch = remaining.match(/\*\*([^*]+)\*\*/);
     // Image: ![alt](url)
     const imgMatch = remaining.match(/!\[([^\]]*)\]\(([^)]+)\)/);
+    // Link: [text](url)
+    const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)]+)\)/);
 
     let firstMatch = null;
     let firstIndex = remaining.length;
@@ -156,6 +158,10 @@ function applyInlineStyles(text) {
     if (imgMatch && imgMatch.index < firstIndex) {
       firstMatch = { type: 'image', match: imgMatch };
       firstIndex = imgMatch.index;
+    }
+    if (linkMatch && linkMatch.index < firstIndex) {
+      firstMatch = { type: 'link', match: linkMatch };
+      firstIndex = linkMatch.index;
     }
 
     if (!firstMatch) {
@@ -188,6 +194,49 @@ function applyInlineStyles(text) {
           }}
         />
       );
+    } else if (firstMatch.type === 'link') {
+      const text = m[1];
+      let url = m[2];
+      const isAudio = url.toLowerCase().endsWith('.mp3') || text.toLowerCase().startsWith('audio:') || url.includes('/api/download/');
+
+      if (isAudio) {
+        if (sessionToken && !url.includes('token=')) {
+          const sep = url.includes('?') ? '&' : '?';
+          url = `${url}${sep}token=${encodeURIComponent(sessionToken)}`;
+        }
+        parts.push(
+          <div key={`audio-${key++}`} style={{ marginTop: '12px', marginBottom: '12px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(124, 58, 237, 0.25)', borderRadius: '12px', padding: '12px', backdropFilter: 'blur(8px)' }}>
+            <span style={{ display: 'block', fontSize: '0.85rem', color: '#8b8fad', marginBottom: '8px', fontWeight: '500' }}>
+              🎵 {text.replace(/^audio:\s*/i, '')}
+            </span>
+            <audio
+              controls
+              src={url}
+              style={{
+                width: '100%',
+                borderRadius: '8px',
+                outline: 'none',
+              }}
+            />
+          </div>
+        );
+      } else {
+        parts.push(
+          <a
+            key={`link-${key++}`}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              color: '#00d4ff',
+              textDecoration: 'underline',
+              fontWeight: '500'
+            }}
+          >
+            {text}
+          </a>
+        );
+      }
     }
 
     remaining = remaining.substring(firstIndex + m[0].length);
@@ -484,7 +533,7 @@ function InteractiveChart({ spec }) {
   );
 }
 
-export default function ChatMessage({ role, content, timestamp }) {
+export default function ChatMessage({ role, content, timestamp, sessionToken }) {
   const isUser = role === 'user';
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -535,7 +584,7 @@ export default function ChatMessage({ role, content, timestamp }) {
       </div>
       <div>
         <div className="message-content" style={{ position: 'relative', paddingRight: !isUser ? '40px' : undefined }}>
-          {parseMarkdown(content)}
+          {parseMarkdown(content, sessionToken)}
 
           {!isUser && (
             <button

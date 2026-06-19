@@ -128,7 +128,7 @@ export default function ChatInput({ onSend, onUpload, isLoading, isUploading, sh
           ref={fileInputRef}
           style={{ display: 'none' }}
           onChange={handleFileChange}
-          accept=".txt,.md,.pdf,.docx,.pptx,.png,.jpg,.jpeg"
+          accept=".txt,.md,.pdf,.docx,.pptx,.png,.jpg,.jpeg,.mp4,.mkv,.avi,.mov,.webm"
         />
 
         <button
@@ -137,8 +137,8 @@ export default function ChatInput({ onSend, onUpload, isLoading, isUploading, sh
           id="upload-button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading || isUploading}
-          aria-label="Upload document"
-          title="Upload document (.pdf, .docx, .pptx, .txt, .png, .jpg)"
+          aria-label="Upload file"
+          title="Upload file (.pdf, .docx, .pptx, .txt, .png, .jpg, .mp4, .mkv, .avi, .mov, .webm)"
         >
           {isUploading ? (
             <div className="upload-spinner" />

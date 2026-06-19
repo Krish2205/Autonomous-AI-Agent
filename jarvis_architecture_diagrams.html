@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS Professional Diagrams</title>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+    </script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 40px;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .diagram-container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin: 40px auto;
+            padding: 20px;
+            max-width: 1200px;
+            overflow-x: auto;
+        }
+        p.desc {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>JARVIS Operating System - Professional System Diagrams</h1>
+    <p class="desc">These diagrams are generated using code (Mermaid.js) to ensure pixel-perfect text, professional corporate styling, and no AI-generated visual artifacts. You can right-click any diagram to save it or take a screenshot for your interview presentation.</p>
+
+    <!-- 1. System Architecture Diagram -->
+    <div class="diagram-container">
+        <h2>1. Comprehensive System Architecture</h2>
+        <div class="mermaid">
+            graph TB
+                %% Frontend Layer
+                subgraph Frontend["Frontend Layer (React + Vite)"]
+                    UI[React Dashboard UI]
+                    Upload[File Uploader Component]
+                    Vis[Agent Visualizer]
+                end
+
+                %% API Layer
+                subgraph API["API Layer (FastAPI)"]
+                    Server[FastAPI Server - /query, /upload]
+                end
+
+                %% Brain / Orchestration Layer
+                subgraph Core["Core Orchestration Brain (/backend/core/)"]
+                    Memory[(Conversation Memory SQLite)]
+                    Planner{Planner LLM \n Groq Llama 3 70B}
+                    Synthesizer[Synthesizer LLM]
+                    Orchestrator[Sequential Orchestrator]
+                    Registry[Agent Pool Registry]
+                end
+
+                %% External APIs
+                subgraph External["External Services & APIs"]
+                    Tavily[Tavily Search API]
+                    Gmail[Gmail IMAP/SMTP]
+                    GCal[Google Calendar API]
+                    YFin[yfinance API]
+                end
+
+                %% Agent Pool Layer
+                subgraph Agents["Modular Agent Pool (/backend/agents/)"]
+                    A1[Search Agent]
+                    A2[Code Agent + E2B Sandbox]
+                    A3[Analyse Agent \n RAG + FAISS + Llama 4 Scout]
+                    A4[Email Agent]
+                    A5[Database Agent \n Text-to-SQL]
+                    A6[Scraper Agent]
+                    A7[Calendar, Finance, Maps, Voice, etc.]
+                end
+
+                %% Connections
+                UI -->|HTTP POST Requests| Server
+                Upload -->|File Upload| Server
+                Server --> Orchestrator
+                
+                Orchestrator --> Memory
+                Memory --> Planner
+                Orchestrator --> Planner
+                
+                Planner -->|Selects Next Action| Registry
+                Registry --> Agents
+                
+                A1 -.->|Queries| Tavily
+                A4 -.->|Reads/Sends| Gmail
+                A7 -.->|API calls| GCal & YFin
+                
+                Agents -->|Returns Tool Output| Planner
+                Planner -->|When all steps done| Synthesizer
+                Synthesizer -->|Final Summarized Response| Server
+                Server --> UI
+
+                classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;
+                classDef core fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+                classDef agent fill:#e8f5e9,stroke:#388e3c,stroke-width:2px;
+                classDef external fill:#fff3e0,stroke:#f57c00,stroke-width:1px,stroke-dasharray: 5 5;
+                
+                class Core,Planner,Orchestrator,Synthesizer,Registry,Memory core;
+                class Agents,A1,A2,A3,A4,A5,A6,A7 agent;
+                class External,Tavily,Gmail,GCal,YFin external;
+        </div>
+    </div>
+
+    <!-- 2. Data Flow Diagram -->
+    <div class="diagram-container">
+        <h2>2. Data Flow Diagram (Sequential ReAct Loop)</h2>
+        <div class="mermaid">
+            sequenceDiagram
+                autonumber
+                actor User
+                participant FE as React Frontend
+                participant API as FastAPI Backend
+                participant Mem as Conversation Memory
+                participant Plan as Planner LLM
+                participant Tool as Agent Pool
+                participant Synth as Synthesizer LLM
+
+                User->>FE: Submits complex multi-step prompt
+                FE->>API: POST /query {"text": "..."}
+                API->>Mem: Fetch session history
+                Mem-->>API: Returns context
+                API->>Plan: Initialize sequential loop with Prompt + Context
+
+                rect rgb(240, 248, 255)
+                    Note over Plan,Tool: --- ReAct Loop (Reasoning + Acting) ---
+                    Plan->>Plan: 1. THOUGHT: What do I need first?
+                    Plan->>Tool: 2. ACTION: Call Search Agent
+                    Tool-->>Plan: 3. OBSERVATION: Returns search data
+                    
+                    Plan->>Plan: 4. THOUGHT: What is the next step?
+                    Plan->>Tool: 5. ACTION: Call Code Agent to calculate
+                    Tool-->>Plan: 6. OBSERVATION: Returns calculation output
+                    
+                    Plan->>Plan: 7. THOUGHT: Final step needed.
+                    Plan->>Tool: 8. ACTION: Call Email Agent to send report
+                    Tool-->>Plan: 9. OBSERVATION: Email sent successfully.
+                end
+
+                Plan->>Plan: 10. THOUGHT: All tasks completed.
+                Plan->>Synth: Forward complete reasoning scratchpad
+                Synth->>Synth: Format human-friendly response
+                Synth-->>API: Returns final string
+                API->>Mem: Save interaction to memory
+                API-->>FE: Return 200 OK Response
+                FE-->>User: Displays result visually
+        </div>
+    </div>
+
+    <!-- 3. Analyse Agent (RAG) Deep Dive -->
+    <div class="diagram-container">
+        <h2>3. RAG Pipeline (Analyse Agent Architecture)</h2>
+        <div class="mermaid">
+            graph LR
+                %% Nodes
+                Doc[Local Documents \n PDFs, Word, Images]
+                Loader[Document Loader \n pypdf, docx2txt, pillow]
+                Split[Text Splitter \n Chunking]
+                Embed[Embedding Model \n Sentence-Transformers]
+                DB[(Vector Database \n FAISS / ChromaDB)]
+                Vision[Vision LLM \n Llama 4 Scout]
+                Agent[Analyse Agent]
+                Query[User Query]
+                Response[Context-Aware Answer]
+
+                %% Flow
+                Doc -->|Parsing| Loader
+                Loader -->|Text extracted| Split
+                Loader -->|Images extracted| Vision
+                Split -->|Text chunks| Embed
+                Embed -->|Vectors| DB
+                
+                Query --> Agent
+                Agent -->|Generates embedding| Embed
+                Agent -->|Similarity Search| DB
+                DB -->|Top K chunks| Agent
+                Vision -->|Image captions/analysis| Agent
+                
+                Agent --> Response
+
+                classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;
+                classDef db fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px;
+                classDef process fill:#fce4ec,stroke:#c2185b,stroke-width:2px;
+
+                class DB db;
+                class Loader,Split,Embed,Vision process;
+        </div>
+    </div>
+
+    <!-- 4. Complex Scenario: Multi-Agent Execution -->
+    <div class="diagram-container">
+        <h2>4. Real-World Scenario: Complex Multi-Agent Execution</h2>
+        <p class="desc"><strong>User Prompt:</strong> "Get me the information of the Second hand car market... prepare statistical images... create a detailed pdf... send to test@mail.com... give steps before starting... give dealers in Ahmedabad."</p>
+        <div class="mermaid">
+            graph TD
+                %% User Input
+                User(["User: Get car market info, make images, <br/> create PDF, email to test@mail.com"])
+
+                %% Frontend & Backend
+                UI["React Dashboard"]
+                Server["FastAPI Backend"]
+
+                %% Flow
+                User --> UI
+                UI -->|"JSON Query"| Server
+
+                subgraph "ReAct Sequential Execution Flow"
+                    direction TB
+                    
+                    P0{"Planner LLM <br/> (Initial State)"}
+                    
+                    subgraph Step 1: Market Research
+                        direction LR
+                        P0 -->|"Invoke"| Search["Search Agent <br/> (Tavily)"]
+                        Search -.->|"Fetch Data"| Web[("Live Web Data")]
+                        Web -.->|"Market Trends &<br/>Dealers"| Search
+                    end
+                    
+                    P1{"Planner LLM <br/> (Has Search Data)"}
+                    Search -->|"Returns Data"| P1
+                    
+                    subgraph Step 2: Data Visualization
+                        direction LR
+                        P1 -->|"Invoke"| Vis["Visualization Agent <br/> (Matplotlib)"]
+                        Vis -.->|"Save PNGs"| FS1[("File System")]
+                    end
+                    
+                    P2{"Planner LLM <br/> (Has Images)"}
+                    Vis -->|"Returns Success"| P2
+                    
+                    subgraph Step 3: PDF Generation
+                        direction LR
+                        P2 -->|"Invoke"| Code["Code Agent <br/> (Sandbox)"]
+                        Code -.->|"Read PNGs /<br/>Write PDF"| FS2[("File System")]
+                    end
+                    
+                    P3{"Planner LLM <br/> (Has PDF Path)"}
+                    Code -->|"Returns PDF Path"| P3
+                    
+                    subgraph Step 4: Email Delivery
+                        direction LR
+                        P3 -->|"Invoke"| Email["Email Agent <br/> (Gmail SMTP)"]
+                        Email -.->|"Send PDF"| Recipient(["test@mail.com"])
+                    end
+                    
+                    P4{"Planner LLM <br/> (Task Complete)"}
+                    Email -->|"Returns Success"| P4
+                end
+
+                P4 -->|"Forward Context"| Synth["Synthesizer LLM"]
+                Synth -->|"Final Summary"| Server
+                Server --> UI
+
+                classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;
+                classDef core fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+                classDef agent fill:#e8f5e9,stroke:#388e3c,stroke-width:2px;
+                classDef external fill:#fff3e0,stroke:#f57c00,stroke-width:1px,stroke-dasharray: 5 5;
+                
+                class P0,P1,P2,P3,P4,Synth core;
+                class Search,Vis,Code,Email agent;
+                class Web,FS1,FS2,Recipient external;
+        </div>
+    </div>
+
+</body>
+</html>

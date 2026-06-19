@@ -39,10 +39,7 @@ class Orchestrator:
 
     def __init__(self, registry: AgentRegistry):
         self.registry = registry
-        self.planner = Planner(
-            agent_descriptions=registry.get_target_descriptions(),
-            valid_targets=registry.get_target_names(),
-        )
+        self.planner = Planner()
         self.synthesizer = Synthesizer()
 
     def _execute_task(self, agent_name: str, query: str) -> str:
@@ -100,7 +97,13 @@ class Orchestrator:
 
             # Step 1: Ask planner what to do next
             current_step_name.set(f"planner_step_{step_num}")
-            plan_step = self.planner.plan(query, chat_history=chat_history, scratchpad=scratchpad)
+            plan_step = self.planner.plan(
+                query=query, 
+                agent_descriptions=self.registry.get_target_descriptions(),
+                valid_targets=self.registry.get_target_names(),
+                chat_history=chat_history, 
+                scratchpad=scratchpad
+            )
 
             if plan_step.action == "finish":
                 logger.info("Planner decided to finish.")
@@ -117,6 +120,11 @@ class Orchestrator:
             agents_used.add(agent_name)
             current_step_name.set(f"agent:{agent_name}")
             result = self._execute_task(agent_name, agent_query)
+
+            # Zero-Touch dynamically reload registry if agent_builder was used
+            if agent_name == "agent_builder":
+                logger.info("Agent Builder ran. Scanning for new agents to register...")
+                self.registry.scan_and_register_agents()
 
             # Record step
             steps_taken.append({
