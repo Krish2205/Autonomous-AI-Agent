@@ -1680,31 +1680,7 @@ body {
   gap: 16px;
 }
 
-@media (min-width: 1400px) {
-  .agents-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-  }
-}
-@media (max-width: 1399px) and (min-width: 1100px) {
-  .agents-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  }
-}
-@media (max-width: 1099px) and (min-width: 800px) {
-  .agents-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  }
-}
-@media (max-width: 799px) and (min-width: 500px) {
-  .agents-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-}
-@media (max-width: 499px) {
-  .agents-grid {
-    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
-  }
-}
+
 
 .agent-card-grid-item {
   transition: all 0.2s ease !important;

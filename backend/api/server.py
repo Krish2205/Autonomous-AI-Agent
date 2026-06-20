@@ -22,9 +22,11 @@ from backend.config import (
     get_profile_config_path,
     load_enabled_agents,
     save_enabled_agents,
+    load_profile_config,
+    save_profile_config,
 )
 
-from backend.core.registry import AgentRegistry
+from backend.core.registry import AgentRegistry, CustomAgentWrapper
 from backend.core.orchestrator import Orchestrator
 from backend.core.memory import ConversationMemory
 from backend.core.notifications import notification_manager
@@ -137,9 +139,42 @@ class WorkspaceAgentsRequest(BaseModel):
     agents: list[str]
 
 
+class AgentConfigInfo(BaseModel):
+    system_prompt: str | None = None
+    model: str | None = None
+    temperature: float | None = None
+
+
+class CustomAgentInfo(BaseModel):
+    name: str
+    description: str
+    system_prompt: str
+    model: str
+    temperature: float
+    base_agent: str | None = None
+
+
 class WorkspaceAgentsResponse(BaseModel):
     enabled_agents: list[str]
     all_agents: list[AgentInfo]
+    agent_configs: dict[str, AgentConfigInfo] = {}
+    custom_agents: list[CustomAgentInfo] = []
+
+
+class AgentConfigRequest(BaseModel):
+    name: str
+    system_prompt: str
+    model: str
+    temperature: float
+
+
+class TestAgentRequest(BaseModel):
+    query: str
+    system_prompt: str
+    model: str
+    temperature: float
+    base_agent: str | None = None
+
 
 
 
@@ -169,9 +204,36 @@ def get_workspace_agents(current_user: str = Depends(get_current_user)):
     """Get enabled and all system agents for the current user/workspace."""
     enabled = load_enabled_agents(current_user)
     all_ag = registry.list_agents()
+    config = load_profile_config(current_user)
+    agent_configs = config.get("agent_configs", {})
+    custom_agents = config.get("custom_agents", [])
+    
+    # Expose custom agents as part of all_agents so the UI displays them in the list!
+    all_agent_infos = [AgentInfo(name=a["name"], description=a["description"]) for a in all_ag]
+    for ca in custom_agents:
+        if not any(a.name == ca["name"] for a in all_agent_infos):
+            all_agent_infos.append(AgentInfo(name=ca["name"], description=ca["description"]))
+        
     return WorkspaceAgentsResponse(
         enabled_agents=enabled,
-        all_agents=[AgentInfo(name=a["name"], description=a["description"]) for a in all_ag]
+        all_agents=all_agent_infos,
+        agent_configs={
+            k: AgentConfigInfo(
+                system_prompt=v.get("system_prompt"),
+                model=v.get("model"),
+                temperature=v.get("temperature")
+            ) for k, v in agent_configs.items() if isinstance(v, dict)
+        },
+        custom_agents=[
+            CustomAgentInfo(
+                name=ca["name"],
+                description=ca["description"],
+                system_prompt=ca["system_prompt"],
+                model=ca["model"],
+                temperature=ca["temperature"],
+                base_agent=ca.get("base_agent")
+            ) for ca in custom_agents
+        ]
     )
 
 
@@ -180,6 +242,100 @@ def update_workspace_agents(request: WorkspaceAgentsRequest, current_user: str =
     """Update enabled agents for the current user/workspace."""
     save_enabled_agents(current_user, request.agents)
     return {"status": "success", "message": "Workspace agents configuration updated successfully."}
+
+
+@app.post("/api/workspace/agents/config")
+def update_agent_config(request: AgentConfigRequest, current_user: str = Depends(get_current_user)):
+    """Update system prompt, model, and temperature override for a specific agent."""
+    config = load_profile_config(current_user)
+    if "agent_configs" not in config:
+        config["agent_configs"] = {}
+    config["agent_configs"][request.name] = {
+        "system_prompt": request.system_prompt,
+        "model": request.model,
+        "temperature": request.temperature
+    }
+    save_profile_config(current_user, config)
+    return {"status": "success", "message": f"Configuration for agent '{request.name}' updated."}
+
+
+@app.post("/api/workspace/agents/custom")
+def create_custom_agent(request: CustomAgentInfo, current_user: str = Depends(get_current_user)):
+    """Create a new custom agent and save it to the profile config."""
+    config = load_profile_config(current_user)
+    custom_agents = config.get("custom_agents", [])
+    
+    # Ensure name is unique and does not conflict with standard agents
+    if request.name in registry._agents:
+        raise HTTPException(status_code=400, detail=f"Agent with name '{request.name}' already exists as a standard agent.")
+        
+    for ca in custom_agents:
+        if ca["name"] == request.name:
+            raise HTTPException(status_code=400, detail=f"Custom agent with name '{request.name}' already exists.")
+            
+    # Append the custom agent
+    custom_agents.append(request.dict())
+    config["custom_agents"] = custom_agents
+    
+    # Enable the new custom agent by default so the user can use it immediately
+    enabled_agents = config.get("enabled_agents", [])
+    if request.name not in enabled_agents:
+        enabled_agents.append(request.name)
+    config["enabled_agents"] = enabled_agents
+    
+    save_profile_config(current_user, config)
+    return {"status": "success", "message": f"Custom agent '{request.name}' created and enabled."}
+
+
+@app.delete("/api/workspace/agents/custom/{name}")
+def delete_custom_agent(name: str, current_user: str = Depends(get_current_user)):
+    """Delete a custom agent from the profile config."""
+    config = load_profile_config(current_user)
+    custom_agents = config.get("custom_agents", [])
+    
+    initial_len = len(custom_agents)
+    custom_agents = [ca for ca in custom_agents if ca["name"] != name]
+    
+    if len(custom_agents) == initial_len:
+        raise HTTPException(status_code=404, detail=f"Custom agent '{name}' not found.")
+        
+    config["custom_agents"] = custom_agents
+    
+    # Remove from enabled agents list
+    enabled_agents = config.get("enabled_agents", [])
+    if name in enabled_agents:
+        enabled_agents.remove(name)
+    config["enabled_agents"] = enabled_agents
+    
+    # Clean up any custom config for this agent name
+    if "agent_configs" in config and name in config["agent_configs"]:
+        del config["agent_configs"][name]
+        
+    save_profile_config(current_user, config)
+    return {"status": "success", "message": f"Custom agent '{name}' deleted."}
+
+
+@app.post("/api/workspace/agents/test")
+def test_custom_agent(request: TestAgentRequest, current_user: str = Depends(get_current_user)):
+    """Test a custom agent prompt configuration in the sandbox test shell."""
+    try:
+        # Create a temporary custom agent wrapper
+        # We pass self.name as test_agent to get_llm/get_system_prompt helpers, but we bypass
+        # user profile configs by overriding standard execution or configuring directly.
+        wrapper = CustomAgentWrapper(
+            name="__test_temp_agent__",
+            description="Testing agent",
+            system_prompt=request.system_prompt,
+            model=request.model,
+            temp=request.temperature,
+            base_agent_name=request.base_agent,
+            registry=registry
+        )
+        result = wrapper.run(request.query)
+        return {"status": "success", "result": result}
+    except Exception as e:
+        logger.error(f"Sandbox agent test run failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 

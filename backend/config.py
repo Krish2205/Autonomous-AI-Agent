@@ -130,18 +130,35 @@ def get_profile_config_path(user_id: str) -> str:
     os.makedirs(db_dir, exist_ok=True)
     return os.path.join(db_dir, f"profile_{safe_user_id}.json")
 
-def load_enabled_agents(user_id: str) -> list[str]:
-    """Load the list of enabled agent names for the specified user."""
+def load_profile_config(user_id: str) -> dict:
+    """Load the complete profile configuration for the user."""
     if not user_id:
-        return []
+        return {}
     path = get_profile_config_path(user_id)
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("enabled_agents", [])
+                return json.load(f)
         except Exception as e:
             config_logger.error(f"Failed to load profile config for {user_id}: {e}")
+    return {}
+
+def save_profile_config(user_id: str, config: dict) -> None:
+    """Save the complete profile configuration for the user."""
+    if not user_id:
+        return
+    path = get_profile_config_path(user_id)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+    except Exception as e:
+        config_logger.error(f"Failed to save profile config for {user_id}: {e}")
+
+def load_enabled_agents(user_id: str) -> list[str]:
+    """Load the list of enabled agent names for the specified user."""
+    config = load_profile_config(user_id)
+    if "enabled_agents" in config:
+        return config["enabled_agents"]
             
     # Fallback to default roles if it matches a key in DEFAULT_ROLE_AGENTS
     user_lower = user_id.lower()
@@ -154,13 +171,8 @@ def load_enabled_agents(user_id: str) -> list[str]:
 
 def save_enabled_agents(user_id: str, enabled_agents: list[str]) -> None:
     """Save the list of enabled agent names for the specified user."""
-    if not user_id:
-        return
-    path = get_profile_config_path(user_id)
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump({"enabled_agents": enabled_agents}, f, indent=2)
-    except Exception as e:
-        config_logger.error(f"Failed to save profile config for {user_id}: {e}")
+    config = load_profile_config(user_id)
+    config["enabled_agents"] = enabled_agents
+    save_profile_config(user_id, config)
 
 
