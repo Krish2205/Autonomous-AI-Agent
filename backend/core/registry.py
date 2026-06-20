@@ -42,6 +42,7 @@ class AgentRegistry:
         if agent.name in self._agents:
             logger.warning(f"Agent '{agent.name}' is already registered. Overwriting.")
         self._agents[agent.name] = agent
+        agent.registry = self
         logger.info(f"Registered agent: {agent.name} -- {agent.description}")
 
     def get(self, name: str) -> BaseAgent | None:
@@ -86,7 +87,7 @@ class AgentRegistry:
         # We need to ensure we can reload if it's already in sys.modules, but for newly created ones, 
         # importlib.import_module is sufficient.
         for _, module_name, _ in pkgutil.iter_modules([agents_dir]):
-            if module_name in ("base", "__init__"):
+            if module_name in ("base", "__init__", "team_base"):
                 continue
             try:
                 full_module_name = f"backend.agents.{module_name}"
@@ -99,7 +100,7 @@ class AgentRegistry:
                     module = importlib.import_module(full_module_name)
                     
                 for name, obj in inspect.getmembers(module, inspect.isclass):
-                    if issubclass(obj, BaseAgent) and obj is not BaseAgent:
+                    if issubclass(obj, BaseAgent) and obj is not BaseAgent and obj.__module__ == module.__name__:
                         # Instantiate and register if not already registered (or overwrite if changed)
                         agent_instance = obj()
                         if agent_instance.name not in self._agents:

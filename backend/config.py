@@ -116,10 +116,10 @@ import logging
 config_logger = logging.getLogger("config")
 
 DEFAULT_ROLE_AGENTS = {
-    "developer": ["code", "devops", "package_manager", "database", "search", "summary", "agent_builder", "visualization", "scraper"],
-    "analyst": ["analyse", "visualization", "finance", "database", "search", "summary", "scraper"],
+    "developer": ["code", "devops", "package_manager", "database", "search", "summary", "agent_builder", "visualization", "scraper", "dev_team"],
+    "analyst": ["analyse", "visualization", "finance", "database", "search", "summary", "scraper", "analyst_team"],
     "designer": ["image_gen", "visualization", "search", "summary", "translation"],
-    "manager": ["calendar", "email", "notification", "summary", "search"],
+    "manager": ["calendar", "email", "notification", "summary", "search", "ops_team"],
     "guest": ["search", "summary", "translation"]
 }
 

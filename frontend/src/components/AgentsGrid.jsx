@@ -19,7 +19,10 @@ const AGENT_ICONS = {
   translation: { icon: '🗣️' },
   video_to_mp3: { icon: '🎬' },
   visualization: { icon: '📈' },
-  voice: { icon: '🎙️' }
+  voice: { icon: '🎙️' },
+  dev_team: { icon: '👥' },
+  analyst_team: { icon: '🔎' },
+  ops_team: { icon: '🏢' }
 };
 
 export default function AgentsGrid({ activeAgents = [], sessionToken, onToast }) {
