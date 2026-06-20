@@ -23,6 +23,26 @@ export default function Login({ onAuthSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [allAgents, setAllAgents] = useState([]);
+  const [selectedAgents, setSelectedAgents] = useState([]);
+
+  // Fetch available system agents
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const res = await fetch('/api/agents');
+        if (res.ok) {
+          const data = await res.json();
+          setAllAgents(data);
+          // Preselect all agents by default
+          setSelectedAgents(data.map(a => a.name));
+        }
+      } catch (err) {
+        console.error("Failed to fetch system agents:", err);
+      }
+    };
+    fetchAgents();
+  }, []);
 
   // Fetch health check to determine auth provider
   useEffect(() => {
@@ -40,7 +60,7 @@ export default function Login({ onAuthSuccess }) {
     fetchHealth();
   }, []);
 
-  const handleLocalSubmit = (e) => {
+  const handleLocalSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg('');
@@ -74,6 +94,20 @@ export default function Login({ onAuthSuccess }) {
         const updated = [...customWorkspaces, { id: sanitizedUser, name: selectedUser }];
         setCustomWorkspaces(updated);
         localStorage.setItem('jarvis_custom_workspaces', JSON.stringify(updated));
+      }
+
+      // Initialize selected agents on the backend for this custom workspace
+      try {
+        await fetch('/api/workspace/agents', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sanitizedUser}`
+          },
+          body: JSON.stringify({ agents: selectedAgents })
+        });
+      } catch (err) {
+        console.error("Failed to initialize custom workspace agents configuration on backend", err);
       }
     }
 
@@ -399,6 +433,7 @@ export default function Login({ onAuthSuccess }) {
                   style={{ flex: 1 }}
                 >
                   <option value="developer">Developer (developer)</option>
+                  <option value="analyst">Data Analyst (analyst)</option>
                   <option value="designer">Designer (designer)</option>
                   <option value="manager">Project Manager (manager)</option>
                   <option value="guest">Guest User (guest)</option>
@@ -460,18 +495,58 @@ export default function Login({ onAuthSuccess }) {
             </div>
 
             {localUser === 'custom' && (
-              <div className="form-group" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-                <label className="form-label">Workspace Name</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. jarvis-admin"
-                  value={customUser}
-                  onChange={(e) => setCustomUser(e.target.value)}
-                  maxLength={25}
-                  required
-                />
-              </div>
+              <>
+                <div className="form-group" style={{ animation: 'fadeIn 0.3s ease-out' }}>
+                  <label className="form-label">Workspace Name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. jarvis-admin"
+                    value={customUser}
+                    onChange={(e) => setCustomUser(e.target.value)}
+                    maxLength={25}
+                    required
+                  />
+                </div>
+                
+                <div className="form-group" style={{ animation: 'fadeIn 0.3s ease-out', marginTop: '16px' }}>
+                  <label className="form-label">Select Workspace Agents</label>
+                  <div style={{
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                    background: 'rgba(6, 6, 15, 0.6)',
+                    border: '1px solid rgba(100, 120, 255, 0.15)',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    {allAgents.map(agent => (
+                      <label key={agent.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedAgents.includes(agent.name)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedAgents(prev => [...prev, agent.name]);
+                            } else {
+                              setSelectedAgents(prev => prev.filter(name => name !== agent.name));
+                            }
+                          }}
+                          style={{
+                            cursor: 'pointer',
+                            accentColor: '#00d4ff'
+                          }}
+                        />
+                        <span style={{ textTransform: 'capitalize', color: '#cbd5e1' }}>
+                          {agent.name.replace('_', ' ')}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
 
             <button type="submit" className="login-btn" disabled={isLoading}>
