@@ -2,12 +2,12 @@ export default function Header({ isOnline, agentCount, version, sidebarOpen, onT
   return (
     <header className="header" id="jarvis-header">
       <div className="header-left">
-        <span style={{ 
-          fontSize: '0.9rem', 
-          fontWeight: 800, 
-          letterSpacing: '2px', 
-          background: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-violet))', 
-          WebkitBackgroundClip: 'text', 
+        <span style={{
+          fontSize: '0.9rem',
+          fontWeight: 800,
+          letterSpacing: '2px',
+          background: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-violet))',
+          WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           textTransform: 'uppercase'
         }}>
@@ -25,16 +25,16 @@ export default function Header({ isOnline, agentCount, version, sidebarOpen, onT
               <span className="user-avatar-icon">👤</span>
               <span className="user-name">{user.user_metadata?.full_name || user.email?.split('@')[0]}</span>
             </div>
-            
+
             <div className="user-actions">
-              <button 
+              <button
                 className="user-action-btn btn-logout"
                 onClick={onLogout}
                 title="Sign Out"
               >
                 Sign Out
               </button>
-              <button 
+              <button
                 className="user-action-btn btn-delete-ws"
                 onClick={onDeleteActiveWorkspace}
                 title="Delete active workspace and all its data"

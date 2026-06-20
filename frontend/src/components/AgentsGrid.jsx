@@ -78,8 +78,8 @@ export default function AgentsGrid({ activeAgents = [] }) {
           const iconData = AGENT_ICONS[agent.name] || { icon: '🔌' };
           const isActive = activeAgents.includes(agent.name);
           return (
-            <div 
-              key={agent.name} 
+            <div
+              key={agent.name}
               className={`agent-card-grid-item ${isActive ? 'active-run' : ''}`}
               style={{
                 display: 'flex',
@@ -106,10 +106,10 @@ export default function AgentsGrid({ activeAgents = [] }) {
                 }}>
                   {iconData.icon}
                 </div>
-                <strong style={{ fontSize: '0.85rem', color: '#e8eaff', textTransform: 'capitalize' }}>
+                <strong style={{ fontSize: '0.85rem', color: '#cbd5e1', textTransform: 'capitalize' }}>
                   {agent.name.replace('_', ' ')}
                 </strong>
-                <span 
+                <span
                   style={{
                     width: '8px',
                     height: '8px',
