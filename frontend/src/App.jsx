@@ -51,7 +51,10 @@ export default function App() {
 
   const handleToast = useCallback((toast) => {
     const id = Math.random().toString(36).substring(2, 9);
-    setToasts(prev => [...prev, { id, ...toast }]);
+    setToasts(prev => {
+      const next = [...prev, { id, ...toast }];
+      return next.slice(-3);
+    });
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 6000);
@@ -205,13 +208,7 @@ export default function App() {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        const id = Math.random().toString(36).substring(2, 9);
-        setToasts(prev => [...prev, { id, ...data }]);
-
-        // Auto-dismiss after 6 seconds
-        setTimeout(() => {
-          setToasts(prev => prev.filter(t => t.id !== id));
-        }, 6000);
+        handleToast(data);
       } catch (err) {
         console.error("Failed to parse incoming notification:", err);
       }
@@ -224,7 +221,7 @@ export default function App() {
     return () => {
       eventSource.close();
     };
-  }, [sessionToken]);
+  }, [sessionToken, handleToast]);
 
   // ── Current conversation ─────────────────────────────────────
   const activeConversation = conversations.find(c => c.id === activeConversationId);
@@ -696,7 +693,7 @@ export default function App() {
               <WorkspaceExplorer sessionToken={sessionToken} onToast={handleToast} filterType="all" />
             )}
             {activeTab === 'agents' && (
-              <AgentsGrid activeAgents={activeAgents} />
+              <AgentsGrid activeAgents={activeAgents} sessionToken={sessionToken} onToast={handleToast} />
             )}
           </div>
         </div>

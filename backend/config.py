@@ -108,3 +108,59 @@ KEYWORD_WEIGHT = 0.4
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 150
 
+
+# ── Workspace Profile Configuration ──────────────────────────────────
+import json
+import logging
+
+config_logger = logging.getLogger("config")
+
+DEFAULT_ROLE_AGENTS = {
+    "developer": ["code", "devops", "package_manager", "database", "search", "summary", "agent_builder", "visualization", "scraper"],
+    "analyst": ["analyse", "visualization", "finance", "database", "search", "summary", "scraper"],
+    "designer": ["image_gen", "visualization", "search", "summary", "translation"],
+    "manager": ["calendar", "email", "notification", "summary", "search"],
+    "guest": ["search", "summary", "translation"]
+}
+
+def get_profile_config_path(user_id: str) -> str:
+    """Get the profile config JSON path for a user."""
+    safe_user_id = "".join(c for c in user_id if c.isalnum() or c in ("-", "_"))
+    db_dir = os.path.join(DATA_DIR, "databases")
+    os.makedirs(db_dir, exist_ok=True)
+    return os.path.join(db_dir, f"profile_{safe_user_id}.json")
+
+def load_enabled_agents(user_id: str) -> list[str]:
+    """Load the list of enabled agent names for the specified user."""
+    if not user_id:
+        return []
+    path = get_profile_config_path(user_id)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("enabled_agents", [])
+        except Exception as e:
+            config_logger.error(f"Failed to load profile config for {user_id}: {e}")
+            
+    # Fallback to default roles if it matches a key in DEFAULT_ROLE_AGENTS
+    user_lower = user_id.lower()
+    for role, agents in DEFAULT_ROLE_AGENTS.items():
+        if role in user_lower:
+            return agents
+            
+    # Default fallback for custom or unknown workspaces: basic search and summary agents
+    return ["search", "summary"]
+
+def save_enabled_agents(user_id: str, enabled_agents: list[str]) -> None:
+    """Save the list of enabled agent names for the specified user."""
+    if not user_id:
+        return
+    path = get_profile_config_path(user_id)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"enabled_agents": enabled_agents}, f, indent=2)
+    except Exception as e:
+        config_logger.error(f"Failed to save profile config for {user_id}: {e}")
+
+

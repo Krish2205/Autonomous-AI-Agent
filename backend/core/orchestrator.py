@@ -6,6 +6,7 @@ Refactored from router.py with all hardcoded logic removed.
 
 from concurrent.futures import ThreadPoolExecutor
 
+from backend.config import current_user_id, load_enabled_agents
 from backend.core.registry import AgentRegistry
 from backend.core.planner import Planner, PlannerStep
 from backend.core.synthesizer import Synthesizer
@@ -44,6 +45,11 @@ class Orchestrator:
 
     def _execute_task(self, agent_name: str, query: str) -> str:
         """Execute a single agent task. Handles fallbacks if necessary."""
+        user_id = current_user_id.get()
+        enabled_agents = load_enabled_agents(user_id) if user_id else self.registry.get_target_names()
+        if agent_name not in enabled_agents:
+            return f"Error: Agent '{agent_name}' is not enabled in this workspace profile."
+
         logger.info(f"Running [{agent_name.upper()}] agent: '{query[:60]}...'")
 
         try:
@@ -51,12 +57,12 @@ class Orchestrator:
 
             # Analyse → Search fallback (non-blocking, no input() in threads)
             if agent_name == "analyse" and result == "INFORMATION_NOT_AVAILABLE":
-                if "search" in self.registry:
+                if "search" in self.registry and "search" in enabled_agents:
                     logger.info("Analyse found nothing. Falling back to Search agent...")
                     fallback_result = self.registry.run("search", query)
                     return f"[SEARCH RESULT (FALLBACK)]:\n{fallback_result}"
                 else:
-                    return "Information not available in local documents and no search agent is registered."
+                    return "Information not available in local documents and no search agent is registered or enabled."
 
             return result
 
@@ -95,12 +101,26 @@ class Orchestrator:
                 )
             scratchpad = "\n".join(scratchpad_lines) if scratchpad_lines else "No steps taken yet."
 
+            # Get enabled agents list
+            user_id = current_user_id.get()
+            enabled_agents = load_enabled_agents(user_id) if user_id else self.registry.get_target_names()
+
+            # Filter valid targets and create dynamic descriptions
+            valid_targets = [name for name in self.registry.get_target_names() if name in enabled_agents]
+            
+            descriptions_lines = []
+            for name in valid_targets:
+                agent = self.registry.get(name)
+                if agent:
+                    descriptions_lines.append(f"- '{name}': {agent.description}")
+            agent_descriptions = "\n".join(descriptions_lines)
+
             # Step 1: Ask planner what to do next
             current_step_name.set(f"planner_step_{step_num}")
             plan_step = self.planner.plan(
                 query=query, 
-                agent_descriptions=self.registry.get_target_descriptions(),
-                valid_targets=self.registry.get_target_names(),
+                agent_descriptions=agent_descriptions,
+                valid_targets=valid_targets,
                 chat_history=chat_history, 
                 scratchpad=scratchpad
             )

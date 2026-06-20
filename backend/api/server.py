@@ -19,6 +19,9 @@ from backend.config import (
     current_user_id,
     get_user_documents_dir,
     get_user_database_path,
+    get_profile_config_path,
+    load_enabled_agents,
+    save_enabled_agents,
 )
 
 from backend.core.registry import AgentRegistry
@@ -130,6 +133,16 @@ class AgentInfo(BaseModel):
     description: str
 
 
+class WorkspaceAgentsRequest(BaseModel):
+    agents: list[str]
+
+
+class WorkspaceAgentsResponse(BaseModel):
+    enabled_agents: list[str]
+    all_agents: list[AgentInfo]
+
+
+
 # ── Routes ──────────────────────────────────────────────────────────
 @app.get("/api/health")
 def health():
@@ -149,6 +162,25 @@ def health():
 def list_agents():
     """List all registered agents with their capabilities."""
     return registry.list_agents()
+
+
+@app.get("/api/workspace/agents", response_model=WorkspaceAgentsResponse)
+def get_workspace_agents(current_user: str = Depends(get_current_user)):
+    """Get enabled and all system agents for the current user/workspace."""
+    enabled = load_enabled_agents(current_user)
+    all_ag = registry.list_agents()
+    return WorkspaceAgentsResponse(
+        enabled_agents=enabled,
+        all_agents=[AgentInfo(name=a["name"], description=a["description"]) for a in all_ag]
+    )
+
+
+@app.post("/api/workspace/agents")
+def update_workspace_agents(request: WorkspaceAgentsRequest, current_user: str = Depends(get_current_user)):
+    """Update enabled agents for the current user/workspace."""
+    save_enabled_agents(current_user, request.agents)
+    return {"status": "success", "message": "Workspace agents configuration updated successfully."}
+
 
 
 @app.post("/api/upload")
@@ -434,6 +466,15 @@ def delete_workspace_data(workspace_id: str, current_user: str = Depends(get_cur
                         logger.info(f"Deleted image asset: {img_path}")
         except Exception as e:
             logger.error(f"Error deleting user images in {GENERATED_IMAGES_DIR}: {e}")
+
+    # 6. Profile config JSON
+    try:
+        profile_json = get_profile_config_path(safe_workspace_id)
+        if os.path.exists(profile_json):
+            os.remove(profile_json)
+            logger.info(f"Deleted profile config file: {profile_json}")
+    except Exception as e:
+        logger.error(f"Failed to delete profile configuration file: {e}")
 
     return {"status": "success", "message": f"Workspace {workspace_id} data deleted successfully."}
 
