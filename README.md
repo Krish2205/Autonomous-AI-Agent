@@ -108,10 +108,12 @@ stateDiagram-v2
 ## ⚡ Key Features
 
 * **Sequential Agentic Loop:** Solves complex queries step-by-step. If you ask to *"Search for the price of BTC, calculate buy power for $1000 in Python, create a chart, and email the output,"* the planner runs `search` ➔ `code` (sandbox calculation) ➔ `visualization` ➔ `email` sequentially.
+* **Hierarchical Sub-Orchestrators & Teams:** Features specialized team agents (Analyst, Dev, Ops) capable of managing their own sub-tasks and delegating to sub-agents for advanced, coordinated problem solving.
+* **Dynamic Agent Configuration:** Fine-tune and customize individual agent behaviors, prompts, and parameters directly through the platform interface.
 * **Self-Describing Agent Registry:** Drop-in extensibility. Add a new agent file, register it in `registry.py` with a brief description, and the Planner LLM automatically discovers and utilizes it.
 * **Self-Correction & Autonomy:** Active error-handling. Agents like `Code Agent` and `Database Agent` analyze execution logs, trace errors (e.g., syntax errors, SQL exceptions), and automatically self-heal and re-run their commands before reporting back.
 * **Containerized Sandbox:** Runs code in a secure execution sandbox (E2B Code Interpreter) with a local Docker daemon execution fallback for robust environment isolation.
-* **Multi-User Auth & RBAC:** Complete workspace segregation. Integrates token validation (Supabase) to isolate data storage, system configurations, analytics, and session history per active user.
+* **Dedicated Workspaces & RBAC:** Complete workspace segregation. Integrates token validation (Supabase) to isolate data storage, system configurations, analytics, and session history per active user within dedicated workspaces.
 * **Usage Analytics & Cost Tracking:** Live metrics monitoring. Real-time cost calculations and token tracking per model and agent step, streamable directly via Server-Sent Events (SSE).
 * **Webhook I/O Channels:** Triggers external integrations. Register incoming event hooks and broadcast structured agent execution status updates via outgoing webhooks.
 * **Aesthetic React Dashboard UI:**
@@ -150,6 +152,7 @@ JARVIS features a robust ecosystem of specialized agents categorized by capabili
 * **📦 Package Manager:** Dynamic pip package installations inside sandbox environments.
 * **🔔 Notification:** Dispatches Server-Sent Events (SSE) toast notifications to the client dashboard.
 * **🤖 Agent Builder:** A meta-agent that writes, registers, and deploys *new* agents into the system dynamically.
+* **👥 Team Sub-Orchestrators:** Specialized team leader agents (Analyst, Dev, Ops) that coordinate multiple sub-agents to solve complex domain-specific tasks.
 
 ---
 
