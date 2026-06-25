@@ -30,13 +30,14 @@ class SearchAgent(BaseAgent):
     def run(self, query: str) -> str:
         logger.info(f"Searching the web for: {query[:80]}...")
 
+        system_prompt = self.get_system_prompt("You are a helpful AI research assistant. Use tools to find current, accurate information from the web. Provide well-organized answers with key facts.")
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a helpful AI research assistant. Use tools to find current, accurate information from the web. Provide well-organized answers with key facts."),
+            ("system", system_prompt),
             ("human", "{query}"),
             ("placeholder", "{agent_scratchpad}"),
         ])
 
-        agent = create_tool_calling_agent(llm=llm, tools=self.tools, prompt=prompt)
+        agent = create_tool_calling_agent(llm=self.get_llm(), tools=self.tools, prompt=prompt)
         executor = AgentExecutor(agent=agent, tools=self.tools, verbose=False)
 
         try:
