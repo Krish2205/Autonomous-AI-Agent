@@ -19,14 +19,14 @@ __all__ = ["ALL_AGENTS"]
 package_dir = os.path.dirname(os.path.abspath(__file__))
 
 for _, module_name, _ in pkgutil.iter_modules([package_dir]):
-    if module_name in ("base", "__init__"):
+    if module_name in ("base", "__init__", "team_base"):
         continue
     try:
         # Import the module
         module = importlib.import_module(f"backend.agents.{module_name}")
         # Search for subclasses of BaseAgent
         for name, obj in inspect.getmembers(module, inspect.isclass):
-            if issubclass(obj, BaseAgent) and obj is not BaseAgent:
+            if issubclass(obj, BaseAgent) and obj is not BaseAgent and obj.__module__ == module.__name__:
                 if obj not in ALL_AGENTS:
                     ALL_AGENTS.append(obj)
                     # Add to globals and export so it can be imported as "from backend.agents import SearchAgent"
