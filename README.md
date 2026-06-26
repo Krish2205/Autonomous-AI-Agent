@@ -280,6 +280,30 @@ Open [http://localhost:5173/](http://localhost:5173/) to interact with the dashb
 
 ---
 
+## 🧪 Integration Testing & Self-Correction Verification
+
+JARVIS includes a robust integration test suite to validate the self-correction loops and multi-agent coordination under sandboxed workspace and database constraints.
+
+### Executing Tests
+To run the integration tests locally, set the `PYTHONPATH` to the project root and execute the test file:
+
+```bash
+# Windows (PowerShell):
+$env:PYTHONPATH="."; python tests/test_self_correction.py
+
+# macOS/Linux:
+PYTHONPATH=. python tests/test_self_correction.py
+```
+
+### Covered Validation Scenarios
+1. **Code Agent Self-Correction:** Validates that the `CodeAgent` recovers from runtime script errors (e.g. `NameError`) by interpreting the trace logs, amending the code, and re-executing successfully.
+2. **Database Agent Self-Correction:** Validates that the `DatabaseAgent` handles query errors (e.g. missing tables) by automatically creating tables and repeating the transaction.
+3. **Module Installation Loop (Orchestration):** Validates that if a script execution fails due to a missing package (`ModuleNotFoundError`), the Orchestrator routes the request to the `PackageManagerAgent` to install the dependency (via `pip`), then resumes execution successfully.
+4. **Database Schema Evolution:** Validates that if an insert query fails due to a missing column, the `DatabaseAgent` runs an `ALTER TABLE` statement to evolve the schema, then completes the insertion.
+
+---
+
 ## 📜 License
 
 This project is licensed under the MIT License.
+
