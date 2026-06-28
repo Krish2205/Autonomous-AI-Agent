@@ -120,7 +120,13 @@ DEFAULT_ROLE_AGENTS = {
     "analyst": ["analyse", "visualization", "finance", "database", "search", "summary", "scraper", "analyst_team"],
     "designer": ["image_gen", "visualization", "search", "summary", "translation"],
     "manager": ["calendar", "email", "notification", "summary", "search", "ops_team"],
-    "guest": ["search", "summary", "translation"]
+    "guest": ["search", "summary", "translation"],
+    "cloud_devops": ["cloud_infra", "github_workflow", "devops", "code", "package_manager", "database", "search", "summary"],
+    "financial_analyst": ["market_intelligence", "financial_reporting", "finance", "analyse", "visualization", "database", "search", "summary"],
+    "cybersec_auditor": ["sec_ops", "compliance", "code", "database", "search", "summary"],
+    "healthcare_researcher": ["biomedical_rag", "analyse", "search", "summary", "translation"],
+    "creative_marketer": ["marketing_campaign", "multimedia_processor", "image_gen", "visualization", "search", "summary"],
+    "legal_ops": ["legal_contract", "talent_ops", "summary", "search", "analyse"]
 }
 
 def get_profile_config_path(user_id: str) -> str:

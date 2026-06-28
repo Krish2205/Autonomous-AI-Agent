@@ -40,7 +40,7 @@ Unlike traditional orchestrators that run agents in static parallel paths or har
                                  │ 📧 Email Agent (Gmail)   │            │
                                  │ 🗄️ Database Agent (SQL)  │            │
                                  │ 🌐 Scraper Agent (HTML)  │            │
-                                 │  ... [20+ Agents Registered]          │
+                                 │  ... [35+ Agents Across 6 Industry Suites] │
                                  └────────────┬─────────────┘            │
                                               │                          │
                                               ▼ (All Steps Complete)     │
@@ -113,7 +113,7 @@ stateDiagram-v2
 * **Self-Describing Agent Registry:** Drop-in extensibility. Add a new agent file, register it in `registry.py` with a brief description, and the Planner LLM automatically discovers and utilizes it.
 * **Self-Correction & Autonomy:** Active error-handling. Agents like `Code Agent` and `Database Agent` analyze execution logs, trace errors (e.g., syntax errors, SQL exceptions), and automatically self-heal and re-run their commands before reporting back.
 * **Containerized Sandbox:** Runs code in a secure execution sandbox (E2B Code Interpreter) with a local Docker daemon execution fallback for robust environment isolation.
-* **Dedicated Workspaces & RBAC:** Complete workspace segregation. Integrates token validation (Supabase) to isolate data storage, system configurations, analytics, and session history per active user within dedicated workspaces.
+* **Dedicated Workspaces & Multi-Domain Profiles:** Complete workspace segregation and specialized industry roles (`cloud_devops`, `financial_analyst`, `cybersec_auditor`, `healthcare_researcher`, `creative_marketer`, `legal_ops`). Dynamically loads curated agent suites tailored to specific business domains.
 * **Usage Analytics & Cost Tracking:** Live metrics monitoring. Real-time cost calculations and token tracking per model and agent step, streamable directly via Server-Sent Events (SSE).
 * **Webhook I/O Channels:** Triggers external integrations. Register incoming event hooks and broadcast structured agent execution status updates via outgoing webhooks.
 * **Aesthetic React Dashboard UI:**
@@ -122,7 +122,7 @@ stateDiagram-v2
 
 ---
 
-## 🔌 Agent Pool Registry (20+ Specialized Agents)
+## 🔌 Agent Pool Registry (35+ Specialized Agents Across 6 Industry Suites)
 
 JARVIS features a robust ecosystem of specialized agents categorized by capability:
 
@@ -139,7 +139,7 @@ JARVIS features a robust ecosystem of specialized agents categorized by capabili
 * **🌐 Scraper:** Fetches clean page body text by stripping scripts, navigation, and style layouts.
 * **🗺️ Maps:** Geolocation, routing calculations, and interactive map configurations.
 
-### 3. Extended Capabilities
+### 3. Extended & Media Capabilities
 * **🎨 Image Gen:** Text-to-image synthesis using DALL·E/Replicate models.
 * **💰 Finance:** Pull stock trends, historical charts, portfolio metrics, and cryptocurrency prices.
 * **🗣️ Voice:** Built-in Speech-to-Text (STT) and Text-to-Speech (TTS) integration.
@@ -153,6 +153,14 @@ JARVIS features a robust ecosystem of specialized agents categorized by capabili
 * **🔔 Notification:** Dispatches Server-Sent Events (SSE) toast notifications to the client dashboard.
 * **🤖 Agent Builder:** A meta-agent that writes, registers, and deploys *new* agents into the system dynamically.
 * **👥 Team Sub-Orchestrators:** Specialized team leader agents (Analyst, Dev, Ops) that coordinate multiple sub-agents to solve complex domain-specific tasks.
+
+### 5. Multi-Domain Industry Suites (New)
+* **☁️ Cloud DevOps Suite (`cloud_infra`, `github_workflow`):** Infrastructure-as-Code dry runs via Terraform, Kubernetes health inspections, pull request summaries, and issue triage automation.
+* **📈 Finance & BI Suite (`market_intelligence`, `financial_reporting`):** Real-time stock fundamentals, crypto sentiment index analysis, executive P&L statement generation, and departmental expense auditing.
+* **🛡️ Cybersecurity & Compliance Suite (`sec_ops`, `compliance`):** Dependency CVE vulnerability auditing, authentication log inspections, and compliance readiness verification (SOC2, GDPR, ISO27001).
+* **🧬 Healthcare & Life Sciences Suite (`biomedical_rag`):** PubMed peer-reviewed research indexing, clinical trial synthesis, and medical literature extraction.
+* **📣 Creative & Marketing Suite (`marketing_campaign`, `multimedia_processor`):** SEO campaign strategy generation, multi-platform ad headlines, video storyboard scripts, and media production outlines.
+* **⚖️ Legal & HR Ops Suite (`legal_contract`, `talent_ops`):** Automated contract clause extraction, NDA risk rating, candidate resume skill parsing, and customized technical interview rubrics.
 
 ---
 
@@ -186,7 +194,9 @@ JARVIS/
 │   │   ├── search_agent.py       # Tavily Web Search agent
 │   │   ├── code_agent.py         # File operations & self-correcting interpreter
 │   │   ├── analyse_agent.py      # Vector DB RAG & Multimodal vision agent
-│   │   ├── ...                   # (20+ specialized agents detailed above)
+│   │   ├── cloud_infra_agent.py  # Cloud infrastructure & IaC agent
+│   │   ├── sec_ops_agent.py      # CVE security audit & log analysis agent
+│   │   ├── ...                   # (35+ specialized agents across 6 industry suites)
 │   │   └── agent_builder_agent.py# Meta-agent for dynamic agent creation
 │   │
 │   ├── tools/                    # Core Utilities
@@ -285,7 +295,7 @@ Open [http://localhost:5173/](http://localhost:5173/) to interact with the dashb
 JARVIS includes a robust integration test suite to validate the self-correction loops and multi-agent coordination under sandboxed workspace and database constraints.
 
 ### Executing Tests
-To run the integration tests locally, set the `PYTHONPATH` to the project root and execute the test file:
+To run the integration test suite locally, set the `PYTHONPATH` to the project root and execute the test file:
 
 ```bash
 # Windows (PowerShell):
