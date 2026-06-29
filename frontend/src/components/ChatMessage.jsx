@@ -107,10 +107,23 @@ function formatInline(text, sessionToken) {
     // Heading
     if (/^#{1,3}\s+/.test(trimmed)) {
       const content = trimmed.replace(/^#{1,3}\s+/, '');
+      const level = line.match(/^#+/)[0].length;
       result.push(
-        <p key={`h-${i}`} style={{ fontWeight: 700, marginTop: '12px' }}>
-          {applyInlineStyles(content, sessionToken)}
-        </p>
+        <div key={`h-${i}`} className={`chat-heading heading-h${level}`} style={{
+          marginTop: '16px',
+          marginBottom: '10px',
+          paddingBottom: '6px',
+          borderBottom: level === 1 ? '1px solid rgba(0, 212, 255, 0.25)' : 'none',
+          color: level === 1 ? '#00d4ff' : level === 2 ? '#a78bfa' : '#38bdf8',
+          fontSize: level === 1 ? '1.15rem' : level === 2 ? '1.05rem' : '0.95rem',
+          fontWeight: 700,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <span style={{ fontSize: '0.9em', opacity: 0.8 }}>{level === 1 ? '🚀' : level === 2 ? '📌' : '🔹'}</span>
+          <span>{applyInlineStyles(content, sessionToken)}</span>
+        </div>
       );
       continue;
     }
@@ -180,19 +193,54 @@ function applyInlineStyles(text, sessionToken) {
     } else if (firstMatch.type === 'bold') {
       parts.push(<strong key={`b-${key++}`}>{m[1]}</strong>);
     } else if (firstMatch.type === 'image') {
+      let imgSrc = m[2];
+      if (sessionToken && imgSrc.startsWith('/') && !imgSrc.includes('token=')) {
+        const sep = imgSrc.includes('?') ? '&' : '?';
+        imgSrc = `${imgSrc}${sep}token=${encodeURIComponent(sessionToken)}`;
+      }
+      const altText = m[1] || 'Generated Visual Asset';
+
       parts.push(
-        <img
-          key={`img-${key++}`}
-          src={m[2]}
-          alt={m[1]}
-          style={{
-            maxWidth: '100%',
-            borderRadius: '8px',
-            marginTop: '8px',
-            display: 'block',
-            border: '1px solid var(--border-color, #3a2d54)'
-          }}
-        />
+        <div key={`img-card-${key++}`} className="generated-image-card" style={{
+          marginTop: '12px',
+          marginBottom: '12px',
+          padding: '10px',
+          background: 'rgba(10, 12, 28, 0.6)',
+          border: '1px solid rgba(0, 212, 255, 0.3)',
+          borderRadius: '12px',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+          display: 'block',
+          maxWidth: '100%'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', fontSize: '0.78rem', color: '#00d4ff', fontWeight: 600 }}>
+            <span>🖼️ {altText}</span>
+          </div>
+          <img
+            src={imgSrc}
+            alt={altText}
+            onError={(e) => {
+              // Graceful error recovery: if relative image path failed, attempt to prefix window origin
+              if (!e.target.dataset.retried && imgSrc.startsWith('/')) {
+                e.target.dataset.retried = 'true';
+                e.target.src = window.location.origin + imgSrc;
+              } else {
+                e.target.style.display = 'none';
+                if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+              }
+            }}
+            style={{
+              width: '100%',
+              maxHeight: '520px',
+              borderRadius: '8px',
+              display: 'block',
+              objectFit: 'contain',
+              background: 'rgba(0,0,0,0.2)'
+            }}
+          />
+          <div className="image-fallback-notice" style={{ display: 'none', padding: '12px', color: '#94a3b8', fontSize: '0.8rem', textAlign: 'center' }}>
+            ⚠️ Image rendering fallback active for: <em>{altText}</em>
+          </div>
+        </div>
       );
     } else if (firstMatch.type === 'link') {
       const text = m[1];

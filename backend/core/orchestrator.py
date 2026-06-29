@@ -12,6 +12,7 @@ from backend.core.planner import Planner, PlannerStep
 from backend.core.synthesizer import Synthesizer
 from backend.core.memory import ConversationMemory
 from backend.core.analytics import current_session_id, current_query_id, current_step_name
+from backend.core.notifications import notification_manager
 from backend.logger import get_logger
 
 logger = get_logger("core.orchestrator")
@@ -43,8 +44,8 @@ class Orchestrator:
         self.planner = Planner()
         self.synthesizer = Synthesizer()
 
-    def _execute_task(self, agent_name: str, query: str) -> str:
-        """Execute a single agent task. Handles fallbacks if necessary."""
+    def _execute_task(self, agent_name: str, query: str, chat_history: str = "") -> str:
+        """Execute a single agent task. Preserves conversation context if available."""
         user_id = current_user_id.get()
         enabled_agents = load_enabled_agents(user_id) if user_id else self.registry.get_target_names()
         if agent_name not in enabled_agents:
@@ -52,14 +53,22 @@ class Orchestrator:
 
         logger.info(f"Running [{agent_name.upper()}] agent: '{query[:60]}...'")
 
+        # Inject conversation history context so individual agents never lose context
+        contextual_query = query
+        if chat_history and len(chat_history.strip()) > 0:
+            # Take recent history turns to keep context tight
+            history_lines = chat_history.strip().split("\n")
+            recent_history = "\n".join(history_lines[-10:])
+            contextual_query = f"[Relevant Conversation History Context]:\n{recent_history}\n\n[Current Agent Task Query]:\n{query}"
+
         try:
-            result = self.registry.run(agent_name, query)
+            result = self.registry.run(agent_name, contextual_query)
 
             # Analyse → Search fallback (non-blocking, no input() in threads)
             if agent_name == "analyse" and result == "INFORMATION_NOT_AVAILABLE":
                 if "search" in self.registry and "search" in enabled_agents:
                     logger.info("Analyse found nothing. Falling back to Search agent...")
-                    fallback_result = self.registry.run("search", query)
+                    fallback_result = self.registry.run("search", contextual_query)
                     return f"[SEARCH RESULT (FALLBACK)]:\n{fallback_result}"
                 else:
                     return "Information not available in local documents and no search agent is registered or enabled."
@@ -160,7 +169,21 @@ class Orchestrator:
 
             agents_used.add(agent_name)
             current_step_name.set(f"agent:{agent_name}")
-            result = self._execute_task(agent_name, agent_query)
+            
+            # Broadcast real-time step execution event to client SSE stream
+            try:
+                notification_manager.broadcast({
+                    "event": "step_progress",
+                    "agent": agent_name,
+                    "query": agent_query,
+                    "thought": plan_step.thought,
+                    "step": step_num,
+                    "status": "running"
+                })
+            except Exception as e:
+                logger.warning(f"Failed to broadcast step notification: {e}")
+
+            result = self._execute_task(agent_name, agent_query, chat_history=chat_history)
 
             # Zero-Touch dynamically reload registry if agent_builder was used
             if agent_name == "agent_builder":

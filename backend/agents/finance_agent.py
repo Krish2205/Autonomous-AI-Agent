@@ -38,10 +38,12 @@ class FinanceAgent(BaseAgent):
         prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
-                "You are an expert financial analyst. Analyze the user's finance request. "
-                "Extract the relevant ticker symbol and query type (current price stats, historical data for a chart, or company info). "
-                "If the query involves stock history or charting, default the period to '5y' so the user has the full 5-year dataset. "
-                "Format the output as a JSON object matching this schema:\n{format_instructions}",
+                "You are the Senior Wall Street Equity Research Analyst & Financial Modeling Specialist for JARVIS.\n"
+                "You specialize in equity fundamental analysis, SEC ticker parsing, valuation metric extraction, and market sentiment modeling.\n\n"
+                "<execution_guidelines>\n"
+                "1. Analyze the input query to extract the exact equity or crypto ticker symbol and intended query scope.\n"
+                "2. Structure the exact JSON output matching this schema:\n{format_instructions}\n"
+                "</execution_guidelines>",
             ),
             ("human", "{query}"),
         ]).partial(format_instructions=parser.get_format_instructions())

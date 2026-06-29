@@ -43,7 +43,7 @@ def list_existing_agent_codes() -> str:
         for mod in agent_modules:
             result.append(f"- {mod}")
             
-        result.append("\nReference structure of a standard agent (e.g. GreetingAgent):")
+        result.append("\nReference structure of an Expert System Agent:")
         result.append(
             "```python\n"
             "try:\n"
@@ -55,34 +55,38 @@ def list_existing_agent_codes() -> str:
             "from backend.agents.base import BaseAgent\n"
             "from backend.config import llm\n"
             "from backend.logger import get_logger\n\n"
-            "logger = get_logger(\"agents.greeting\")\n\n"
+            "logger = get_logger(\"agents.expert_domain\")\n\n"
             "@tool\n"
-            "def get_personalized_greeting(name: str) -> str:\n"
-            "    \"\"\"Generates a custom greeting for the given name.\"\"\"\n"
-            "    return f\"Hello, {name}! Welcome to JARVIS dynamic operating system.\"\n\n"
-            "class GreetingAgent(BaseAgent):\n"
-            "    name = \"greeting\"\n"
-            "    description = \"Greets users and provides customized welcome messages.\"\n\n"
+            "def perform_domain_analysis(query_input: str) -> str:\n"
+            "    \"\"\"Performs automated domain analysis using free open-source tools.\"\"\"\n"
+            "    return f\"[Analysis Output]: Successfully processed '{query_input}'.\"\n\n"
+            "class ExpertDomainAgent(BaseAgent):\n"
+            "    name = \"expert_domain\"\n"
+            "    description = \"Executes domain-specific analysis using open-source tools.\"\n\n"
             "    def __init__(self):\n"
-            "        self.tools = [get_personalized_greeting]\n\n"
+            "        self.tools = [perform_domain_analysis]\n\n"
             "    def run(self, query: str) -> str:\n"
-            "        logger.info(f\"Greeting: {query[:80]}...\")\n"
+            "        logger.info(f\"Running Expert Domain task: {query[:80]}...\")\n"
             "        prompt = ChatPromptTemplate.from_messages([\n"
             "            (\n"
             "                \"system\",\n"
-            "                \"You are a friendly greeting assistant. Use get_personalized_greeting to greet the user.\"\n"
+            "                \"You are the Chief Domain Architect for JARVIS.\\n\"\n"
+            "                \"You possess deep domain expertise and execute tasks with rigorous precision.\\n\\n\"\n"
+            "                \"<execution_guidelines>\\n\"\n"
+            "                \"1. Analyze the input request and invoke domain tools (`perform_domain_analysis`).\\n\"\n"
+            "                \"2. Deliver institutional-grade structured markdown reports with clear executive summaries.\\n\"\n"
+            "                \"</execution_guidelines>\"\n"
             "            ),\n"
             "            (\"human\", \"{query}\"),\n"
             "            (\"placeholder\", \"{agent_scratchpad}\")\n"
             "        ])\n"
             "        agent = create_tool_calling_agent(llm, self.tools, prompt)\n"
-            "        executor = AgentExecutor(agent=agent, tools=self.tools, verbose=False)\n"
+            "        executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, max_iterations=5, handle_parsing_errors=True)\n"
             "        try:\n"
             "            response = executor.invoke({\"query\": query})\n"
             "            return response.get(\"output\", str(response))\n"
             "        except Exception as e:\n"
-            "            logger.error(f\"Greeting failed: {e}\")\n"
-            "            return f\"Greeting error: {str(e)}\"\n"
+            "            return f\"Domain error: {str(e)}\"\n"
             "```"
         )
         return "\n".join(result)
@@ -172,16 +176,15 @@ class AgentBuilderAgent(BaseAgent):
         prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
-                "You are the JARVIS Agent Builder Agent, a meta-agent designed to extend the system.\n"
-                "You write custom Python agents and register them dynamically in the system.\n\n"
-                "Guidelines:\n"
-                "1. If asked to write a new agent, write a clean Python module subclassing BaseAgent.\n"
-                "2. Ensure the class inherits from BaseAgent, has class variables name (lowercase string) "
-                "and description (string), and implements run(self, query: str) -> str.\n"
-                "3. Ensure the module defines LangChain tools with @tool decorator and sets up create_tool_calling_agent.\n"
-                "4. Use the `create_agent_file` tool to save your written code.\n"
-                "5. Use `list_existing_agent_codes` to look up existing agents and structures for reference.\n"
-                "6. CRITICAL IMPORT RULE: You MUST import BaseAgent exactly as: `from backend.agents.base import BaseAgent`. Never import it from any other module like langchain.chains.base. If you import it incorrectly, registration will fail."
+                "You are the Chief Meta-Architect & AI Agent Systems Designer for JARVIS.\n"
+                "Your role is to autonomously design, construct, validate, and dynamically register world-class, domain-expert AI agents.\n\n"
+                "<agent_construction_rules>\n"
+                "1. EXPERT SYSTEM PROMPTING: Every agent you construct MUST be assigned an authoritative executive persona (e.g., Chief Architect, Lead Specialist, Director) with explicit `<execution_guidelines>` and structured chain-of-thought rules crafted in the style of Claude system prompts.\n"
+                "2. FREE & OPEN-SOURCE TOOL STACK: Equip new agents with clean `@tool` functions leveraging standard Python libraries or free open-source tools (`requests`, `urllib`, `sqlite3`, `beautifulsoup4`, `scikit-learn`, `math`, `json`). Avoid proprietary paid APIs unless standard.\n"
+                "3. CLASS & SCHEMA CONSTRAINTS: The module MUST inherit from `BaseAgent`, set `name` (lowercase alphanumeric/underscore), set `description` (clear task summary), and implement `run(self, query: str) -> str` using `create_tool_calling_agent` and `AgentExecutor`.\n"
+                "4. CRITICAL IMPORT MANDATE: Always import `BaseAgent` exactly as: `from backend.agents.base import BaseAgent`. Never import it from any chain package.\n"
+                "5. EXECUTION: Use `create_agent_file` to save and auto-validate your generated code module.\n"
+                "</agent_construction_rules>"
             ),
             ("human", "{query}"),
             ("placeholder", "{agent_scratchpad}"),

@@ -129,10 +129,10 @@ class EmailAgent(BaseAgent):
 
                 extract_prompt = ChatPromptTemplate.from_messages([
                     (
-                        "system",
-                        "Extract email details from the user query. Return in this exact format:\n"
-                        "TO: <email address>\nSUBJECT: <subject line>\nBODY: <email body>\n"
-                        "If any field is missing, use MISSING as the value.",
+                        "You are the Chief Communications Officer & Executive Dispatch Specialist for JARVIS.\n"
+                        "Extract email dispatch parameters from the user query. Return in this exact structured format:\n"
+                        "TO: <email address>\nSUBJECT: <professional subject line>\nBODY: <polished, executive email body text>\n"
+                        "If any field is missing, output MISSING for that field.",
                     ),
                     ("human", "{query}"),
                 ])

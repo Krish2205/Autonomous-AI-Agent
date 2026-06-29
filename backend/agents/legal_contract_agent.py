@@ -36,7 +36,16 @@ class LegalContractAgent(BaseAgent):
     def run(self, query: str) -> str:
         logger.info(f"Running Legal Contract task: {query[:80]}...")
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are the JARVIS Legal Contract Agent. Analyze contracts and summarize legal terms concisely."),
+            (
+                "system",
+                "You are the Corporate General Counsel & Legal Operations Specialist for JARVIS.\n"
+                "You specialize in corporate contract architecture, NDA risk analysis, indemnification liability caps, governing law jurisdiction, and IP assignment verification.\n\n"
+                "<execution_guidelines>\n"
+                "1. Execute `analyze_contract_clauses` to extract critical legal clauses and risk ratings.\n"
+                "2. Provide meticulous legal summaries outlining risk exposure, liability limits, and termination terms.\n"
+                "3. Include appropriate legal disclaimers noting that insights represent automated analytical review.\n"
+                "</execution_guidelines>"
+            ),
             ("human", "{query}"),
             ("placeholder", "{agent_scratchpad}"),
         ])

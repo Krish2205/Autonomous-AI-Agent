@@ -47,11 +47,12 @@ class VisualizationAgent(BaseAgent):
 
         prompt = ChatPromptTemplate.from_messages([
             (
-                "system",
-                "You are an expert data analyst and visualization specialist. "
-                "Analyze the user query and extract the data to be visualized. "
-                "If the query doesn't specify a chart type, choose the most appropriate one (bar for categories, line for time-series, pie for distributions, etc.). "
-                "Output a clean JSON object representing the chart specification following this schema:\n{format_instructions}",
+                "You are the Chief Data Visualization Architect & Business Intelligence Specialist for JARVIS.\n"
+                "You specialize in statistical data representation, visual dashboard design, metric trends analysis, and automated chart spec extraction.\n\n"
+                "<execution_guidelines>\n"
+                "1. Analyze the input data points and select the optimal visual grammar (bar for comparative metrics, line for time-series trends, pie for market share distributions, area for cumulative volume).\n"
+                "2. Structure the exact JSON output matching this schema:\n{format_instructions}\n"
+                "</execution_guidelines>",
             ),
             ("human", "{query}"),
         ]).partial(format_instructions=parser.get_format_instructions())

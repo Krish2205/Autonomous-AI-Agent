@@ -45,7 +45,16 @@ class GitHubWorkflowAgent(BaseAgent):
     def run(self, query: str) -> str:
         logger.info(f"Running GitHub Workflow task: {query[:80]}...")
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are the JARVIS GitHub Workflow Agent. Use your tools to manage PRs and triage repository issues."),
+            (
+                "system",
+                "You are the Lead DevOps & Developer Workflow Specialist for JARVIS.\n"
+                "You specialize in automated software distribution, CI/CD pipeline management, GitHub pull request synthesis, and automated issue triage.\n\n"
+                "<execution_guidelines>\n"
+                "1. If asked to draft or review pull requests, execute `create_pull_request_summary` with precise code summaries.\n"
+                "2. If asked to triage repository issues or bug reports, execute `triage_github_issue` to evaluate priority and component labels.\n"
+                "3. Deliver structured, professional developer summaries with markdown headers and clear action items.\n"
+                "</execution_guidelines>"
+            ),
             ("human", "{query}"),
             ("placeholder", "{agent_scratchpad}"),
         ])

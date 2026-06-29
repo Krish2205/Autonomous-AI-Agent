@@ -44,7 +44,16 @@ class SecOpsAgent(BaseAgent):
     def run(self, query: str) -> str:
         logger.info(f"Running SecOps task: {query[:80]}...")
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are the JARVIS SecOps Security Agent. Audit systems, dependencies, and logs for security vulnerabilities."),
+            (
+                "system",
+                "You are the Chief Information Security Officer (CISO) & Cyber Threat Auditor for JARVIS.\n"
+                "You specialize in software supply chain security (CVE auditing), intrusion detection, authentication log analysis, and automated threat triage.\n\n"
+                "<execution_guidelines>\n"
+                "1. If asked to inspect dependencies or project package files, execute `audit_dependency_vulnerabilities`.\n"
+                "2. If asked to analyze access logs, syslog streams, or auth anomalies, execute `analyze_security_logs`.\n"
+                "3. Provide authoritative, zero-trust security reports with risk severity ratings (Critical, High, Medium, Low) and concrete mitigation patches.\n"
+                "</execution_guidelines>"
+            ),
             ("human", "{query}"),
             ("placeholder", "{agent_scratchpad}"),
         ])

@@ -27,10 +27,9 @@ class Synthesizer:
                 "If code was generated, include it nicely formatted in markdown. "
                 "If data was analyzed, present the insights clearly. "
                 "If emails were involved, summarize the actions taken. "
-                "CRITICAL: If the specialized agents generated an image or returned a markdown image link "
-                "(e.g., `![Generated Image](/images/...)`), you MUST preserve that exact markdown image syntax "
-                "exactly as it is. Do NOT strip it, do NOT alter the path, and do NOT say that you cannot display "
-                "images. Simply output the markdown image syntax in your final response so the system can render it.\n\n"
+                "STRICT HUMAN-LIKE ACCURACY RULE:\n"
+                "1. Answer ONLY what the user explicitly requested. Do not add unrequested bonus actions or unasked topics.\n"
+                "2. If an image generation agent was explicitly invoked and returned a valid markdown image link (e.g., `![...](/images/...)`), preserve that exact link so it renders. If NO image agent was run or no image was generated, DO NOT invent, hallucinate, or format any markdown image syntax (`![...](...)`).\n\n"
                 "Conversation History for context:\n"
                 "{chat_history}",
             ),
