@@ -149,7 +149,7 @@ export default function App() {
   const handleDeleteActiveWorkspace = useCallback(async () => {
     if (!user) return;
     
-    const isCustomUser = !['developer', 'designer', 'manager', 'guest'].includes(user.id);
+    const isCustomUser = !['developer', 'analyst', 'designer', 'manager', 'guest', 'cloud_devops', 'financial_analyst', 'cybersec_auditor', 'healthcare_researcher', 'creative_marketer', 'legal_ops'].includes(user.id);
     const workspaceName = user.user_metadata?.full_name || user.id;
     
     const message = isCustomUser 
@@ -199,6 +199,8 @@ export default function App() {
     }
   }, [user, sessionToken, handleLogout]);
 
+  const [currentStep, setCurrentStep] = useState(null);
+
   // ── Real-Time Notification Stream (SSE) ──────────────────────
   useEffect(() => {
     if (!sessionToken) return;
@@ -208,7 +210,11 @@ export default function App() {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        handleToast(data);
+        if (data.event === 'step_progress' || data.agent) {
+          setCurrentStep(data);
+        } else {
+          handleToast(data);
+        }
       } catch (err) {
         console.error("Failed to parse incoming notification:", err);
       }
@@ -365,6 +371,7 @@ export default function App() {
       }));
     } finally {
       setIsLoading(false);
+      setCurrentStep(null);
     }
   }, [activeConversationId, createNewChat, sessionToken]);
 
@@ -668,7 +675,7 @@ export default function App() {
                         sessionToken={sessionToken}
                       />
                     ))}
-                    {isLoading && <TypingIndicator />}
+                    {isLoading && <TypingIndicator currentStep={currentStep} />}
                     <div ref={messagesEndRef} />
                   </div>
                 )}

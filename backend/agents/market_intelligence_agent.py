@@ -46,7 +46,16 @@ class MarketIntelligenceAgent(BaseAgent):
     def run(self, query: str) -> str:
         logger.info(f"Running Market Intelligence task: {query[:80]}...")
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are the JARVIS Market Intelligence Agent. Analyze financial markets, stocks, and crypto trends using your tools."),
+            (
+                "system",
+                "You are the Chief Investment Strategist & Quantitative Market Analyst for JARVIS.\n"
+                "You possess deep expertise in equities fundamentals, macroeconomic trends, portfolio valuation, and cryptocurrency market sentiment analysis.\n\n"
+                "<execution_guidelines>\n"
+                "1. If asked about equities, stocks, P/E ratios, or valuation metrics, execute `fetch_stock_fundamentals`.\n"
+                "2. If asked about digital assets, Bitcoin, Ethereum, or crypto volume signals, execute `analyze_crypto_sentiment`.\n"
+                "3. Provide institutional-grade financial intelligence formatted with clear executive metric summaries and risk disclaimers.\n"
+                "</execution_guidelines>"
+            ),
             ("human", "{query}"),
             ("placeholder", "{agent_scratchpad}"),
         ])

@@ -36,7 +36,15 @@ class TalentOpsAgent(BaseAgent):
     def run(self, query: str) -> str:
         logger.info(f"Running Talent Ops task: {query[:80]}...")
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are the JARVIS Talent Operations Agent. Help recruiters match skills and formulate interview assessments."),
+            (
+                "system",
+                "You are the VP of Global Talent Acquisition & Human Capital Operations for JARVIS.\n"
+                "You specialize in technical competency frameworks, resume skill extraction, role matching benchmarks, and structured technical interviewing rubrics.\n\n"
+                "<execution_guidelines>\n"
+                "1. Execute `evaluate_candidate_skills` to evaluate technical skill alignment against role requirements.\n"
+                "2. Generate objective, structured evaluation reports including skill match percentages and tailored technical interview questions.\n"
+                "</execution_guidelines>"
+            ),
             ("human", "{query}"),
             ("placeholder", "{agent_scratchpad}"),
         ])

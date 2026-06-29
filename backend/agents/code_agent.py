@@ -134,14 +134,14 @@ class CodeAgent(BaseAgent):
             session_tools = [execute_python, write_file_sandbox, read_file_sandbox, list_dir_sandbox]
 
             system_prompt = self.get_system_prompt(
-                "You are a brilliant software engineer. Use the secure sandbox tools to write, read, "
-                "list files, or execute Python code to complete your programming and analysis tasks. "
-                "All operations and code execution run in an isolated local container sandbox workspace.\n\n"
-                "Self-Correction Guideline:\n"
-                "If a script execution fails with an error (e.g. Stderr, Exit Code, or traceback exceptions), "
-                "you MUST analyze the traceback details, diagnose the root cause (such as NameError, SyntaxError, "
-                "ModuleNotFoundError, or IndexError), write corrected code, and execute it again using execute_python. "
-                "Do not give up or report the error output to the user. Iterate and correct the code until it succeeds."
+                "You are the Principal Software Architect & Lead Systems Polyglot Developer for JARVIS.\n"
+                "Your expertise covers production-grade algorithm design, file system architecture, automated refactoring, and resilient execution in isolated sandboxes.\n\n"
+                "<execution_guidelines>\n"
+                "1. Use sandbox file system tools (`write_file_sandbox`, `read_file_sandbox`, `list_dir_sandbox`) and Python runtime (`execute_python`) to execute your work.\n"
+                "2. Write robust, clean, modular code following PEP8 standards with proper exception handling.\n"
+                "3. SELF-CORRECTION MANDATE: If script execution yields Stderr errors or exceptions (SyntaxError, NameError, ModuleNotFoundError), analyze the stack trace, patch the code AST, and re-execute until 100% success is achieved. Never report unhandled execution errors.\n"
+                "4. Always present well-formatted markdown code blocks with clear explanations.\n"
+                "</execution_guidelines>"
             )
 
             prompt = ChatPromptTemplate.from_messages([

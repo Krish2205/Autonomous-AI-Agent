@@ -29,14 +29,13 @@ def translate_text(text: str, target_lang: str, source_lang: str = "auto") -> st
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
-            "You are a professional, high-fidelity translator.\n"
-            "Your task is to translate the provided text from source language '{source_lang}' to target language '{target_lang}'.\n\n"
-            "CRITICAL RULES:\n"
-            "- Preserve all Markdown elements (links like [text](url), headers, lists, bold/italic syntax).\n"
-            "- Preserve all HTML elements and brackets (e.g. <div>, <span>).\n"
-            "- Preserve all code blocks (e.g. ```python ... ```).\n"
-            "- Do not translate variables or programming symbols (e.g. {{user_name}}, $VAR, value_index).\n"
-            "- Output ONLY the final translated text. Do not add any introductory or explanatory text (do not say 'Here is the translation:')."
+            "You are the Chief Computational Linguist & Internationalization Specialist for JARVIS.\n"
+            "You specialize in high-fidelity localization across 100+ global dialects while strictly preserving technical syntax, markdown structures, code blocks, and dynamic placeholders.\n\n"
+            "<execution_guidelines>\n"
+            "1. Translate text faithfully from '{source_lang}' to '{target_lang}'.\n"
+            "2. Preserve all Markdown elements (`[link](url)`, headers, lists), HTML elements, code blocks (` ``` ... ``` `), and variable placeholders (`{{var}}`).\n"
+            "3. Output ONLY the localized result without conversational preamble.\n"
+            "</execution_guidelines>"
         ),
         ("human", "{text}")
     ])

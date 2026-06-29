@@ -1,28 +1,39 @@
 import { useState, useEffect, useRef } from 'react';
 
 const AGENT_ICONS = {
-  search: { icon: '🔍' },
-  code: { icon: '💻' },
-  analyse: { icon: '📊' },
-  summary: { icon: '📝' },
-  email: { icon: '📧' },
-  database: { icon: '🗄️' },
-  scraper: { icon: '🌐' },
-  agent_builder: { icon: '🔧' },
-  calendar: { icon: '📅' },
-  devops: { icon: '⚙️' },
-  finance: { icon: '💵' },
-  image_gen: { icon: '🎨' },
-  maps: { icon: '🗺️' },
-  notification: { icon: '🔔' },
-  package_manager: { icon: '📦' },
-  translation: { icon: '🗣️' },
-  video_to_mp3: { icon: '🎬' },
-  visualization: { icon: '📈' },
-  voice: { icon: '🎙️' },
-  dev_team: { icon: '👥' },
-  analyst_team: { icon: '🔎' },
-  ops_team: { icon: '🏢' }
+  search: { icon: '🔍', tags: ['Search', 'Realtime'] },
+  code: { icon: '💻', tags: ['Python', 'Sandbox'] },
+  analyse: { icon: '📊', tags: ['RAG', 'FAISS', 'Docs'] },
+  summary: { icon: '📝', tags: ['Synthesis', 'Brief'] },
+  email: { icon: '📧', tags: ['SMTP', 'Dispatch'] },
+  database: { icon: '🗄️', tags: ['SQLite', 'Queries'] },
+  scraper: { icon: '🌐', tags: ['Web Extract'] },
+  agent_builder: { icon: '🔧', tags: ['Meta Agent', 'Auto-Gen'] },
+  calendar: { icon: '📅', tags: ['Google Sync'] },
+  devops: { icon: '⚙️', tags: ['Docker', 'CI/CD'] },
+  finance: { icon: '💵', tags: ['Stocks', 'P&L'] },
+  image_gen: { icon: '🎨', tags: ['FLUX.1', 'Generative'] },
+  maps: { icon: '🗺️', tags: ['Geospatial'] },
+  notification: { icon: '🔔', tags: ['Alerts', 'System'] },
+  package_manager: { icon: '📦', tags: ['NPM', 'Pip'] },
+  translation: { icon: '🗣️', tags: ['Multilingual'] },
+  video_to_mp3: { icon: '🎬', tags: ['Media Extract'] },
+  visualization: { icon: '📈', tags: ['Charts', 'Plots'] },
+  voice: { icon: '🎙️', tags: ['Speech STT'] },
+  dev_team: { icon: '👥', tags: ['Fullstack Dev'] },
+  analyst_team: { icon: '🔎', tags: ['Analytics'] },
+  ops_team: { icon: '🏢', tags: ['Operations'] },
+  cloud_infra: { icon: '☁️', tags: ['Terraform', 'K8s'] },
+  github_workflow: { icon: '🔀', tags: ['Actions', 'PRs'] },
+  market_intelligence: { icon: '📊', tags: ['Trends', 'Intel'] },
+  financial_reporting: { icon: '📑', tags: ['Statements'] },
+  sec_ops: { icon: '🛡️', tags: ['CVE Triage'] },
+  compliance: { icon: '📜', tags: ['SOC2', 'GDPR'] },
+  biomedical_rag: { icon: '🧬', tags: ['PubMed', 'Clinical'] },
+  marketing_campaign: { icon: '📣', tags: ['SEO', 'Viral Ads'] },
+  multimedia_processor: { icon: '🎞️', tags: ['Video Sync'] },
+  legal_contract: { icon: '⚖️', tags: ['NDA Audit'] },
+  talent_ops: { icon: '👔', tags: ['Hiring', 'Rubrics'] }
 };
 
 export default function AgentsGrid({ activeAgents = [], sessionToken, onToast }) {
@@ -371,12 +382,13 @@ export default function AgentsGrid({ activeAgents = [], sessionToken, onToast })
         }
         .agents-grid {
           display: grid !important;
-          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
+          grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)) !important;
           grid-auto-rows: max-content !important;
-          gap: 16px !important;
+          gap: 12px !important;
           overflow-y: auto !important;
           flex: 1 !important;
           padding-bottom: 20px !important;
+          padding-right: 4px !important;
           transform: translate3d(0, 0, 0);
         }
         .studio-select option {
@@ -394,10 +406,10 @@ export default function AgentsGrid({ activeAgents = [], sessionToken, onToast })
           right: 0;
           width: 520px;
           height: 100vh;
-          background: rgba(13, 18, 30, 0.96);
-          backdrop-filter: blur(25px);
-          border-left: 1px solid rgba(255, 255, 255, 0.08);
-          box-shadow: -15px 0 35px rgba(0, 0, 0, 0.6);
+          background: rgba(10, 14, 32, 0.96);
+          backdrop-filter: blur(30px);
+          border-left: 1px solid rgba(0, 212, 255, 0.25);
+          box-shadow: -20px 0 50px rgba(0, 0, 0, 0.8);
           z-index: 1000;
           display: flex;
           flex-direction: column;
@@ -432,21 +444,21 @@ export default function AgentsGrid({ activeAgents = [], sessionToken, onToast })
           color: #94a3b8;
         }
         .studio-input, .studio-textarea, .studio-select {
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 8px;
+          background: rgba(6, 8, 20, 0.8);
+          border: 1px solid rgba(100, 120, 255, 0.15);
+          border-radius: 10px;
           color: #f1f5f9;
-          padding: 10px 14px;
-          font-size: 0.8rem;
+          padding: 12px 16px;
+          font-size: 0.82rem;
           transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           box-sizing: border-box;
           width: 100%;
         }
         .studio-input:focus, .studio-textarea:focus, .studio-select:focus {
-          border-color: rgba(0, 212, 255, 0.4);
-          background: rgba(255, 255, 255, 0.05);
+          border-color: #00d4ff;
+          background: rgba(10, 15, 36, 0.9);
           outline: none;
-          box-shadow: 0 0 10px rgba(0, 212, 255, 0.15);
+          box-shadow: 0 0 15px rgba(0, 212, 255, 0.25);
         }
         .studio-slider-container {
           display: flex;
@@ -468,100 +480,131 @@ export default function AgentsGrid({ activeAgents = [], sessionToken, onToast })
           border-radius: 50%;
           background: #00d4ff;
           cursor: pointer;
-          box-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+          box-shadow: 0 0 10px rgba(0, 212, 255, 0.6);
           transition: transform 0.1s ease;
         }
         .studio-slider::-webkit-slider-thumb:hover {
-          transform: scale(1.2);
+          transform: scale(1.25);
         }
         .studio-btn {
-          background: linear-gradient(135deg, #00d4ff, #7c3aed);
+          background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
           color: #ffffff;
           border: none;
-          border-radius: 8px;
-          padding: 10px 18px;
+          border-radius: 10px;
+          padding: 10px 20px;
           font-size: 0.82rem;
-          font-weight: 600;
+          font-weight: 800;
+          letter-spacing: 0.5px;
           cursor: pointer;
           transition: all 0.2s ease;
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 8px;
+          box-shadow: 0 0 20px rgba(0, 212, 255, 0.25);
         }
         .studio-btn:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+          transform: translateY(-2px);
+          box-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
         }
         .studio-btn:active {
           transform: translateY(0);
         }
         .studio-btn-secondary {
           background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.1);
           color: #cbd5e1;
+          box-shadow: none;
         }
         .studio-btn-secondary:hover {
           background: rgba(255, 255, 255, 0.1);
+          color: #fff;
         }
         .delete-custom-btn:hover {
-          color: rgba(244, 63, 94, 1) !important;
-          background: rgba(244, 63, 94, 0.1) !important;
+          color: #f43f5e !important;
+          background: rgba(244, 63, 94, 0.15) !important;
+          border-color: rgba(244, 63, 94, 0.3) !important;
         }
         .edit-config-btn {
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          color: #94a3b8;
+          background: rgba(0, 212, 255, 0.08);
+          border: 1px solid rgba(0, 212, 255, 0.2);
+          color: #00d4ff;
           border-radius: 6px;
-          padding: 6px 12px;
-          font-size: 0.72rem;
+          padding: 4px 10px;
+          font-size: 0.7rem;
           cursor: pointer;
           transition: all 0.2s ease;
           display: inline-flex;
           align-items: center;
-          gap: 6px;
-          font-weight: 500;
+          gap: 4px;
+          font-weight: 700;
         }
         .edit-config-btn:hover {
-          background: rgba(0, 212, 255, 0.08);
-          border-color: rgba(0, 212, 255, 0.3);
-          color: #f1f5f9;
+          background: rgba(0, 212, 255, 0.2);
+          border-color: #00d4ff;
+          color: #ffffff;
+          box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
         }
         .search-input-container {
           position: relative;
-          width: 280px;
+          width: 300px;
         }
         .search-input-container input {
           width: 100%;
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: rgba(10, 14, 32, 0.8);
+          border: 1px solid rgba(100, 120, 255, 0.2);
           border-radius: 20px;
           padding: 8px 16px 8px 36px;
           font-size: 0.8rem;
-          color: #cbd5e1;
+          color: #f1f5f9;
           transition: all 0.2s ease;
         }
         .search-input-container input:focus {
-          background: rgba(255, 255, 255, 0.04);
-          border-color: rgba(0, 212, 255, 0.3);
+          background: rgba(15, 22, 50, 0.95);
+          border-color: #00d4ff;
           outline: none;
+          box-shadow: 0 0 15px rgba(0, 212, 255, 0.25);
         }
         .search-icon-glass {
           position: absolute;
           left: 14px;
           top: 50%;
           transform: translateY(-50%);
-          font-size: 0.8rem;
-          color: #64748b;
+          font-size: 0.85rem;
+          color: #00d4ff;
           pointer-events: none;
         }
         .badge-studio {
-          font-size: 0.62rem;
-          padding: 2px 6px;
+          font-size: 0.6rem;
+          padding: 2px 5px;
           border-radius: 4px;
-          font-weight: 600;
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
+          letter-spacing: 0.4px;
+        }
+        .agent-card-grid-item {
+          background: rgba(13, 17, 38, 0.7) !important;
+          border: 1px solid rgba(255, 255, 255, 0.08) !important;
+          border-radius: 14px !important;
+          backdrop-filter: blur(20px) !important;
+          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3) !important;
+        }
+        .agent-card-grid-item:hover {
+          transform: translateY(-3px) !important;
+          border-color: rgba(0, 212, 255, 0.4) !important;
+          background: rgba(18, 24, 54, 0.88) !important;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 212, 255, 0.18) !important;
+        }
+        .agent-card-grid-item.enabled-card {
+          border-color: rgba(0, 212, 255, 0.35) !important;
+          background: radial-gradient(circle at 100% 0%, rgba(124, 58, 237, 0.15) 0%, rgba(0, 212, 255, 0.15) 100%), rgba(15, 21, 48, 0.9) !important;
+          box-shadow: 0 0 20px rgba(0, 212, 255, 0.2), inset 0 0 10px rgba(0, 212, 255, 0.08) !important;
+          opacity: 1 !important;
+        }
+        .agent-card-grid-item.disabled-card {
+          opacity: 0.88 !important;
+          filter: none !important;
         }
       `}</style>
 
@@ -838,24 +881,40 @@ export default function AgentsGrid({ activeAgents = [], sessionToken, onToast })
       )}
 
       {/* Main Studio View Panel */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '0 4px', gap: '16px' }}>
-        <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 700, color: 'var(--text-tertiary)' }}>
-          Workspace Studio ({enabledAgents.length} active / {agents.length} total)
-        </span>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', padding: '0 4px', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{
+            padding: '4px 12px',
+            background: 'rgba(0, 212, 255, 0.08)',
+            border: '1px solid rgba(0, 212, 255, 0.25)',
+            borderRadius: '99px',
+            color: '#00d4ff',
+            fontSize: '0.72rem',
+            fontWeight: 800,
+            letterSpacing: '1.5px',
+            textTransform: 'uppercase',
+            boxShadow: '0 0 15px rgba(0, 212, 255, 0.15)'
+          }}>
+            ⚡ WORKSPACE STUDIO
+          </span>
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8' }}>
+            ({enabledAgents.length} Active / {agents.length} Total Registered)
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
           {/* Search Bar */}
           <div className="search-input-container">
             <span className="search-icon-glass">🔍</span>
             <input
               type="text"
-              placeholder="Search studio agents..."
+              placeholder="Search active studio agents..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
           <button
             className="studio-btn"
-            style={{ padding: '8px 16px', fontSize: '0.76rem' }}
+            style={{ padding: '9px 18px', fontSize: '0.78rem' }}
             onClick={() => setIsCreating(true)}
           >
             ➕ Custom Agent
@@ -912,7 +971,6 @@ export default function AgentsGrid({ activeAgents = [], sessionToken, onToast })
             }}>
               ➕
             </div>
-            <strong style={{ fontSize: '0.82rem', color: '#cbd5e1' }}>Deploy Custom Agent</strong>
             <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '6px', maxWidth: '200px' }}>
               Create an LLM agent with target prompt logic & base tools
             </span>
@@ -927,91 +985,75 @@ export default function AgentsGrid({ activeAgents = [], sessionToken, onToast })
           const isCustom = customAgents.some(ca => ca.name === agent.name);
           const isConfigured = agentConfigs[agent.name] !== undefined;
 
-          const cardBackground = isActive 
-            ? 'rgba(0, 212, 255, 0.04)' 
-            : isEnabled 
-              ? 'rgba(255, 255, 255, 0.015)' 
-              : 'rgba(255, 255, 255, 0.003)';
-          const cardBorder = isActive 
-            ? '1px solid rgba(0, 212, 255, 0.25)' 
-            : isEnabled 
-              ? '1px solid rgba(255, 255, 255, 0.06)' 
-              : '1px solid rgba(255, 255, 255, 0.015)';
-          const cardOpacity = isEnabled ? 1 : 0.5;
-
           return (
             <div
               key={agent.name}
-              className={`agent-card-grid-item ${isActive ? 'active-run' : ''}`}
+              className={`agent-card-grid-item ${isEnabled ? 'enabled-card' : 'disabled-card'} ${isActive ? 'active-run' : ''}`}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
-                padding: '20px',
-                background: cardBackground,
-                border: cardBorder,
-                borderRadius: '12px',
-                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                padding: '14px',
                 position: 'relative',
-                boxShadow: isActive ? '0 0 15px rgba(0, 212, 255, 0.04)' : 'none',
-                opacity: cardOpacity,
                 boxSizing: 'border-box',
-                minHeight: '175px'
+                minHeight: '145px'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                 <div style={{
                   width: '32px',
                   height: '32px',
                   borderRadius: '8px',
-                  background: isCustom ? 'rgba(124, 58, 237, 0.1)' : 'rgba(255, 255, 255, 0.03)',
-                  border: isCustom ? '1px solid rgba(124, 58, 237, 0.2)' : 'none',
+                  background: isEnabled ? 'rgba(0, 212, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+                  border: isEnabled ? '1px solid rgba(0, 212, 255, 0.25)' : '1px solid rgba(255, 255, 255, 0.06)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '1.05rem'
+                  fontSize: '1.05rem',
+                  boxShadow: isEnabled ? '0 0 10px rgba(0, 212, 255, 0.15)' : 'none',
+                  flexShrink: 0
                 }}>
                   {iconData.icon}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <strong style={{ fontSize: '0.82rem', color: '#e2e8f0', textTransform: 'capitalize' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                  <strong style={{ fontSize: '0.84rem', color: '#f8fafc', fontWeight: 700, textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {agent.name.replace('_', ' ')}
                   </strong>
                   <div style={{ display: 'flex', gap: '4px', marginTop: '2px', alignItems: 'center' }}>
                     {isCustom && (
-                      <span className="badge-studio" style={{ background: 'rgba(124, 58, 237, 0.15)', color: '#a78bfa' }}>
+                      <span className="badge-studio" style={{ background: 'rgba(124, 58, 237, 0.18)', color: '#c4b5fd', border: '1px solid rgba(124, 58, 237, 0.3)' }}>
                         Custom
                       </span>
                     )}
                     {isConfigured && (
-                      <span className="badge-studio" style={{ background: 'rgba(0, 212, 255, 0.12)', color: '#22d3ee' }}>
-                        Configured
+                      <span className="badge-studio" style={{ background: 'rgba(0, 212, 255, 0.15)', color: '#38bdf8', border: '1px solid rgba(0, 212, 255, 0.3)' }}>
+                        Tuned
                       </span>
                     )}
                   </div>
                 </div>
                 
-                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                   {isActive && (
                     <span
                       style={{
-                        width: '8px',
-                        height: '8px',
+                        width: '7px',
+                        height: '7px',
                         borderRadius: '50%',
-                        background: 'var(--accent-cyan)',
-                        boxShadow: '0 0 8px var(--accent-cyan)'
+                        background: '#00d4ff',
+                        boxShadow: '0 0 8px #00d4ff'
                       }}
-                      title="Running task"
+                      title="Executing sub-task"
                     />
                   )}
                   <button
                     onClick={() => handleToggleAgent(agent.name)}
                     style={{
                       position: 'relative',
-                      width: '34px',
+                      width: '32px',
                       height: '18px',
                       borderRadius: '9px',
-                      background: isEnabled ? 'linear-gradient(135deg, #00d4ff, #7c3aed)' : 'rgba(255,255,255,0.08)',
-                      border: '1px solid rgba(255,255,255,0.05)',
+                      background: isEnabled ? 'linear-gradient(135deg, #00d4ff, #7c3aed)' : 'rgba(255,255,255,0.1)',
+                      border: '1px solid rgba(255,255,255,0.12)',
                       cursor: 'pointer',
                       transition: 'all 0.3s ease',
                       padding: 0,
@@ -1025,19 +1067,36 @@ export default function AgentsGrid({ activeAgents = [], sessionToken, onToast })
                       height: '12px',
                       borderRadius: '50%',
                       background: '#fff',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
                       transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                      transform: isEnabled ? 'translateX(18px)' : 'translateX(2px)'
+                      transform: isEnabled ? 'translateX(16px)' : 'translateX(2px)'
                     }} />
                   </button>
                 </div>
               </div>
               
-              <p style={{ fontSize: '0.74rem', color: '#94a3b8', lineHeight: '1.45', margin: '0 0 14px 0', flex: 1 }}>
+              <p style={{ fontSize: '0.76rem', color: '#cbd5e1', lineHeight: '1.4', margin: '0 0 10px 0', flex: 1 }}>
                 {agent.description}
               </p>
 
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: 'auto' }}>
+              {/* Capability Tag Pills */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
+                {(iconData.tags || ['Specialized Tool']).map(tag => (
+                  <span key={tag} style={{
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontSize: '0.62rem',
+                    fontWeight: 600,
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    color: '#94a3b8'
+                  }}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
                 <button
                   className="edit-config-btn"
                   onClick={() => handleEditAgentClick(agent)}
@@ -1053,12 +1112,12 @@ export default function AgentsGrid({ activeAgents = [], sessionToken, onToast })
                       handleDeleteAgent(agent.name);
                     }}
                     style={{
-                      background: 'rgba(244, 63, 94, 0.05)',
-                      border: '1px solid rgba(244, 63, 94, 0.1)',
+                      background: 'rgba(244, 63, 94, 0.08)',
+                      border: '1px solid rgba(244, 63, 94, 0.2)',
                       cursor: 'pointer',
                       fontSize: '0.72rem',
-                      color: 'rgba(244, 63, 94, 0.8)',
-                      padding: '5px 8px',
+                      color: '#f43f5e',
+                      padding: '5px 10px',
                       borderRadius: '6px',
                       display: 'flex',
                       alignItems: 'center',

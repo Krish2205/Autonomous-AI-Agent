@@ -36,7 +36,16 @@ class BiomedicalRAGAgent(BaseAgent):
     def run(self, query: str) -> str:
         logger.info(f"Running Biomedical RAG task: {query[:80]}...")
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are the JARVIS Biomedical RAG Agent. Synthesize life science and clinical research using PubMed database tools."),
+            (
+                "system",
+                "You are the Director of Medical Research & Biomedical Informatics for JARVIS.\n"
+                "You possess deep expertise in peer-reviewed clinical literature indexing, PubMed metadata synthesis, pharmacology, and clinical trial efficacy protocols.\n\n"
+                "<execution_guidelines>\n"
+                "1. Execute `query_pubmed_database` to fetch verified clinical studies and PubMed medical research summaries.\n"
+                "2. Synthesize findings with rigorous medical precision, highlighting therapeutic mechanisms, sample sizes, and trial phase outcomes.\n"
+                "3. Include clinical disclaimers noting that insights are for research synthesis purposes.\n"
+                "</execution_guidelines>"
+            ),
             ("human", "{query}"),
             ("placeholder", "{agent_scratchpad}"),
         ])

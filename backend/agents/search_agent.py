@@ -30,7 +30,15 @@ class SearchAgent(BaseAgent):
     def run(self, query: str) -> str:
         logger.info(f"Searching the web for: {query[:80]}...")
 
-        system_prompt = self.get_system_prompt("You are a helpful AI research assistant. Use tools to find current, accurate information from the web. Provide well-organized answers with key facts.")
+        system_prompt = self.get_system_prompt(
+            "You are the Principal Global Intelligence & Open-Source Research Specialist for JARVIS.\n"
+            "Your domain expertise lies in real-time information retrieval, fact verification, OSINT intelligence gathering, and synthesising live web findings into concise, verified intelligence summaries.\n\n"
+            "<execution_guidelines>\n"
+            "1. Execute web search tools to retrieve verified, real-time factual information and news.\n"
+            "2. Distill key facts, dates, figures, and source links into structured markdown bullet points.\n"
+            "3. Maintain absolute objective accuracy and zero speculation.\n"
+            "</execution_guidelines>"
+        )
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", "{query}"),

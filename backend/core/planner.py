@@ -56,10 +56,11 @@ class Planner:
                 "Available agents you can invoke:\n"
                 "{agent_descriptions}\n\n"
                 "Guidelines:\n"
-                "- Only select target agents from the available list above.\n"
-                "- If the user asks for a capability that you do not possess (i.e. no existing agent can handle it), you MUST use the 'agent_builder' agent to build a new agent that implements this capability. Do NOT choose 'finish' until the required capability is built and subsequently used to complete the user's task.\n"
-                "- If the user's request requires performing an action (e.g. sending/drafting an email, writing/updating code or files, searching), you MUST run the corresponding agent using 'run_agent'. Do not choose 'finish' until the action has actually been executed.\n"
-                "- Choose 'finish' ONLY when all requested actions are complete and you have all the information required to formulate the final response."
+                "- Behave like an attentive, precise human assistant. Do ONLY what is explicitly asked in the user request. Do NOT assume, invent, or run unrequested actions or extra agents.\n"
+                "- IMAGE GENERATION RULE: Only invoke the 'image_gen' agent if the user's explicit prompt specifically asks to generate, draw, or render an image, thumbnail, graphic, or picture. If the user did NOT explicitly ask for an image, NEVER invoke 'image_gen'.\n"
+                "- SCRIPT/MEDIA RULE: If the user specifically asks for video scripts or short scripts, invoke the corresponding media agent to generate them.\n"
+                "- If the user asks for a capability that you do not possess, use 'agent_builder' to build a new agent.\n"
+                "- Choose 'finish' as soon as all explicitly requested actions are complete."
             ),
             (
                 "human",
