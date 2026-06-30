@@ -116,17 +116,18 @@ import logging
 config_logger = logging.getLogger("config")
 
 DEFAULT_ROLE_AGENTS = {
-    "developer": ["code", "devops", "package_manager", "database", "search", "summary", "agent_builder", "visualization", "scraper", "dev_team"],
-    "analyst": ["analyse", "visualization", "finance", "database", "search", "summary", "scraper", "analyst_team"],
+    "developer": ["code", "devops", "package_manager", "database", "search", "summary", "agent_builder", "visualization", "scraper", "dev_team", "sheets", "calendar", "notes"],
+    "analyst": ["analyse", "visualization", "finance", "database", "search", "summary", "scraper", "analyst_team", "sheets", "calendar"],
     "designer": ["image_gen", "visualization", "search", "summary", "translation"],
-    "manager": ["calendar", "email", "notification", "summary", "search", "ops_team"],
+    "manager": ["calendar", "email", "notification", "summary", "search", "ops_team", "sheets", "notes"],
     "guest": ["search", "summary", "translation"],
     "cloud_devops": ["cloud_infra", "github_workflow", "devops", "code", "package_manager", "database", "search", "summary"],
-    "financial_analyst": ["market_intelligence", "financial_reporting", "finance", "analyse", "visualization", "database", "search", "summary"],
+    "financial_analyst": ["market_intelligence", "financial_reporting", "finance", "analyse", "visualization", "database", "search", "summary", "sheets"],
     "cybersec_auditor": ["sec_ops", "compliance", "code", "database", "search", "summary"],
     "healthcare_researcher": ["biomedical_rag", "analyse", "search", "summary", "translation"],
     "creative_marketer": ["marketing_campaign", "multimedia_processor", "image_gen", "visualization", "search", "summary"],
-    "legal_ops": ["legal_contract", "talent_ops", "summary", "search", "analyse"]
+    "legal_ops": ["legal_contract", "talent_ops", "summary", "search", "analyse"],
+    "edtech_studio": ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "ncert_lesson_architect", "cbse_exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse"]
 }
 
 def get_profile_config_path(user_id: str) -> str:
@@ -163,17 +164,18 @@ def save_profile_config(user_id: str, config: dict) -> None:
 def load_enabled_agents(user_id: str) -> list[str]:
     """Load the list of enabled agent names for the specified user."""
     config = load_profile_config(user_id)
-    if "enabled_agents" in config:
+    if "enabled_agents" in config and config["enabled_agents"]:
         return config["enabled_agents"]
             
     # Fallback to default roles if it matches a key in DEFAULT_ROLE_AGENTS
-    user_lower = user_id.lower()
-    for role, agents in DEFAULT_ROLE_AGENTS.items():
-        if role in user_lower:
-            return agents
+    if user_id:
+        user_lower = user_id.lower()
+        for role, agents in DEFAULT_ROLE_AGENTS.items():
+            if role in user_lower or user_lower in role:
+                return agents
             
-    # Default fallback for custom or unknown workspaces: basic search and summary agents
-    return ["search", "summary"]
+    # Fallback for all tools
+    return ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "ncert_lesson_architect", "cbse_exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse", "code"]
 
 def save_enabled_agents(user_id: str, enabled_agents: list[str]) -> None:
     """Save the list of enabled agent names for the specified user."""

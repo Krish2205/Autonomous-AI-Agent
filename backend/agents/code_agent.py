@@ -131,7 +131,24 @@ class CodeAgent(BaseAgent):
                 except Exception as e:
                     return f"Failed to list directory: {str(e)}"
 
-            session_tools = [execute_python, write_file_sandbox, read_file_sandbox, list_dir_sandbox]
+            @tool
+            def install_pip_package(package_name: str) -> str:
+                """Installs a python package using pip in the sandbox environment. Use this if your execution code throws a ModuleNotFoundError."""
+                logger.info(f"Installing package '{package_name}' in sandbox...")
+                try:
+                    res = sandbox.execute(["pip", "install", package_name])
+                    output = ""
+                    if res["stdout"]:
+                        output += f"Stdout:\n{res['stdout']}\n"
+                    if res["stderr"]:
+                        output += f"Stderr:\n{res['stderr']}\n"
+                    if res["exit_code"] != 0:
+                        output += f"Exit Code: {res['exit_code']}\n"
+                    return output if output else f"Successfully installed '{package_name}'."
+                except Exception as e:
+                    return f"Failed to install package '{package_name}': {str(e)}"
+
+            session_tools = [execute_python, write_file_sandbox, read_file_sandbox, list_dir_sandbox, install_pip_package]
 
             system_prompt = self.get_system_prompt(
                 "You are the Principal Software Architect & Lead Systems Polyglot Developer for JARVIS.\n"

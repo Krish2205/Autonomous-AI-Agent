@@ -33,7 +33,19 @@ const AGENT_ICONS = {
   marketing_campaign: { icon: '📣', tags: ['SEO', 'Viral Ads'] },
   multimedia_processor: { icon: '🎞️', tags: ['Video Sync'] },
   legal_contract: { icon: '⚖️', tags: ['NDA Audit'] },
-  talent_ops: { icon: '👔', tags: ['Hiring', 'Rubrics'] }
+  talent_ops: { icon: '👔', tags: ['Hiring', 'Rubrics'] },
+  teacher_executive_assistant: { icon: '🎓', tags: ['Master Copilot', 'Executive'] },
+  sheets: { icon: '📊', tags: ['Google Sheets', 'Gradebook'] },
+  notes: { icon: '📝', tags: ['Digital Notes', 'Observations'] },
+  document_exam_scanner: { icon: '📄', tags: ['Doc Scanner', 'Exams'] },
+  sheets_gradebook_agent: { icon: '📊', tags: ['Sheets Sync', 'Gradebook'] },
+  calendar_scheduler_agent: { icon: '📅', tags: ['Calendar Sync', 'PTM'] },
+  notes_manager_agent: { icon: '📝', tags: ['Notes Sync', 'Observations'] },
+  ncert_lesson_architect: { icon: '📑', tags: ['Syllabus', 'Curriculum Plan'] },
+  cbse_exam_generator: { icon: '📝', tags: ['Exam Controller', 'Quizzes & Tests'] },
+  whatsapp_notice_curator: { icon: '📲', tags: ['WhatsApp Broadcast'] },
+  hinglish_socratic_tutor: { icon: '🧠', tags: ['Hinglish STEM', 'Analogies'] },
+  cce_report_card_architect: { icon: '📊', tags: ['CCE Remarks', 'PTM'] }
 };
 
 export default function AgentsGrid({ activeAgents = [], sessionToken, onToast }) {

@@ -191,6 +191,56 @@ def load_and_parse_file(file_path: str, vision_llm=None) -> str:
             logger.error(f"Failed to generate summary: {e}")
             return f"Video Title/Source: {os.path.basename(file_path)}\n\n--- DETAILED TIMELINE ---\n{full_timeline}"
 
+    elif ext == "csv":
+        import pandas as pd
+        logger.info(f"Parsing CSV file with pandas: {file_path}")
+        try:
+            df = pd.read_csv(file_path)
+            max_rows = 150
+            truncated = len(df) > max_rows
+            df_subset = df.head(max_rows)
+            try:
+                md_table = df_subset.to_markdown(index=False)
+            except Exception:
+                md_table = df_subset.to_string(index=False)
+            summary = f"CSV File Structure and Sample (showing first {max_rows} rows):\n"
+            summary += f"Columns: {', '.join(map(str, df.columns))}\n"
+            summary += f"Total rows: {len(df)}, Total columns: {len(df.columns)}\n\n"
+            summary += md_table
+            if truncated:
+                summary += "\n\n*(Note: Dataset was truncated for LLM analysis)*"
+            return summary
+        except Exception as e:
+            logger.error(f"Error parsing CSV: {e}")
+            return f"[Error parsing CSV: {str(e)}]"
+
+    elif ext in ("xlsx", "xls"):
+        import pandas as pd
+        logger.info(f"Parsing Excel file with pandas: {file_path}")
+        try:
+            xls = pd.ExcelFile(file_path)
+            sheets_summary = []
+            for sheet_name in xls.sheet_names:
+                df = pd.read_excel(file_path, sheet_name=sheet_name)
+                max_rows = 50
+                truncated = len(df) > max_rows
+                df_subset = df.head(max_rows)
+                try:
+                    md_table = df_subset.to_markdown(index=False)
+                except Exception:
+                    md_table = df_subset.to_string(index=False)
+                sheet_sum = f"Sheet Name: {sheet_name}\n"
+                sheet_sum += f"Columns: {', '.join(map(str, df.columns))}\n"
+                sheet_sum += f"Total rows: {len(df)}, Total columns: {len(df.columns)}\n\n"
+                sheet_sum += md_table
+                if truncated:
+                    sheet_sum += "\n\n*(Note: Sheet was truncated for LLM analysis)*"
+                sheets_summary.append(sheet_sum)
+            return "\n\n===\n\n".join(sheets_summary)
+        except Exception as e:
+            logger.error(f"Error parsing Excel: {e}")
+            return f"[Error parsing Excel: {str(e)}]"
+
     else:
         logger.warning(f"Unsupported file type: .{ext}")
         return ""

@@ -29,7 +29,8 @@ class Synthesizer:
                 "If emails were involved, summarize the actions taken. "
                 "STRICT HUMAN-LIKE ACCURACY RULE:\n"
                 "1. Answer ONLY what the user explicitly requested. Do not add unrequested bonus actions or unasked topics.\n"
-                "2. If an image generation agent was explicitly invoked and returned a valid markdown image link (e.g., `![...](/images/...)`), preserve that exact link so it renders. If NO image agent was run or no image was generated, DO NOT invent, hallucinate, or format any markdown image syntax (`![...](...)`).\n\n"
+                "2. PRESERVE PDF DOWNLOAD LINKS & MEDIA LINKS EXACTLY: If any agent returned a downloadable PDF link (e.g. `[📥 Click Here to Download...]`) or media links, YOU MUST PRESERVE THOSE EXACT LINKS IN YOUR FINAL RESPONSE. NEVER claim or hallucinate that you cannot generate direct PDFs.\n"
+                "3. PRESERVE EXHAUSTIVE CONTENT: If an agent generated a comprehensive, detailed day-by-day lesson plan, timeline, or examination paper, preserve the full detailed markdown without summarizing, condensing, or truncating it.\n\n"
                 "Conversation History for context:\n"
                 "{chat_history}",
             ),

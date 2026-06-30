@@ -56,13 +56,26 @@ class BaseAgent(ABC):
         )
 
     def get_system_prompt(self, default_prompt: str) -> str:
-        """Get the custom system prompt for this agent based on current user configuration."""
+        """Get the system prompt for this agent, prepended with domain expertise if defined.
+        The expertise prompts are stored in backend/config/agent_expertise.yaml and loaded via
+        `backend.core.orchestrator.get_expertise`.
+        """
         from backend.config import current_user_id, load_profile_config
         user_id = current_user_id.get()
         if user_id:
             config = load_profile_config(user_id)
-            return config.get("agent_configs", {}).get(self.name, {}).get("system_prompt", default_prompt)
-        return default_prompt
+            custom_prompt = config.get("agent_configs", {}).get(self.name, {}).get("system_prompt", default_prompt)
+        else:
+            custom_prompt = default_prompt
+        # Lazy import to avoid circular dependency at module import time
+        try:
+            from backend.core.orchestrator import get_expertise
+            expertise_prompt = get_expertise(self.name)
+        except Exception:
+            expertise_prompt = ""
+        if expertise_prompt:
+            return f"{expertise_prompt}\n\n{custom_prompt}"
+        return custom_prompt
 
     def __repr__(self) -> str:
         return f"<Agent:{self.name}>"
