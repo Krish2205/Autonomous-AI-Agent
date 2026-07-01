@@ -53,14 +53,18 @@ class Planner:
                 "system",
                 "You are the central planner for JARVIS, an autonomous AI operating system.\n"
                 "Your job is to solve the user's request step-by-step by deciding which agent to invoke next, or when to finish.\n\n"
+                "Workspace Rules & Profile directives:\n"
+                "{workspace_rules}\n\n"
                 "Available agents you can invoke:\n"
                 "{agent_descriptions}\n\n"
                 "Guidelines:\n"
                 "- Behave like an attentive, precise human assistant. Do ONLY what is explicitly asked in the user request. Do NOT assume, invent, or run unrequested actions or extra agents.\n"
+                "- TEXT/CODE REQUEST RULE: If the user is asking for code, a query, a command, a script, or an explanation (e.g., 'give me code to pull my repo', 'write a SQL query to...', 'how do I check...'), do NOT try to actually execute or perform the action on the system, and do NOT build a custom agent. Simply route the request to the 'code' agent (or another text agent) to generate and return the code/text directly, and then 'finish'.\n"
                 "- ACTION-ORIENTED EXECUTION RULE: When the user asks to create, build, set, or generate an action item (e.g. 'create a sheet for Class 2 sections A-F', 'set a meeting', 'draft lesson plan'), DO NOT call 'search' or return tutorial instructions! You MUST directly invoke the specific execution agent (e.g. 'sheets', 'calendar', 'ncert_lesson_architect') to execute the creation task immediately.\n"
                 "- IMAGE GENERATION RULE: Only invoke the 'image_gen' agent if the user's explicit prompt specifically asks to generate, draw, or render an image, thumbnail, graphic, or picture. If the user did NOT explicitly ask for an image, NEVER invoke 'image_gen'.\n"
                 "- SCRIPT/MEDIA RULE: If the user specifically asks for video scripts or short scripts, invoke the corresponding media agent to generate them.\n"
                 "- If the user asks for a capability that you do not possess, use 'agent_builder' to build a new agent.\n"
+                "- SELF-CORRECTION & ERROR RECOVERY MANDATE: If a previous step failed or returned an error (as shown in the previous steps scratchpad), analyze the error reason, refine the task query, and invoke either the same agent with corrected input or a different agent to resolve the issue. Do NOT repeat the exact same failing query twice.\n"
                 "- Choose 'finish' as soon as all explicitly requested actions are complete."
             ),
             (
@@ -75,7 +79,7 @@ class Planner:
         planner_llm = llm.with_structured_output(PlannerStep)
         self.chain = self.prompt | planner_llm
 
-    def plan(self, query: str, agent_descriptions: str, valid_targets: list[str], chat_history: str = "", scratchpad: str = "") -> PlannerStep:
+    def plan(self, query: str, agent_descriptions: str, valid_targets: list[str], chat_history: str = "", scratchpad: str = "", workspace_rules: str = "") -> PlannerStep:
         """Decide the next step to take."""
         logger.info(f"Planning next step for query: {query[:80]}...")
 
@@ -130,11 +134,16 @@ class Planner:
                 )
 
         try:
+            # Fallback default rules if empty
+            if not workspace_rules:
+                workspace_rules = "No specific workspace rules defined."
+                
             step = self.chain.invoke({
                 "agent_descriptions": agent_descriptions,
                 "query": query,
                 "chat_history": chat_history,
                 "scratchpad": scratchpad,
+                "workspace_rules": workspace_rules
             })
             
             # Post-validation of target

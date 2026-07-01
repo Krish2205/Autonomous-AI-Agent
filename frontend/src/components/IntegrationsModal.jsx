@@ -50,6 +50,32 @@ export default function IntegrationsModal({ isOpen, onClose, onToast }) {
   });
 
   const [connectingKey, setConnectingKey] = useState(null);
+  const [testingKey, setTestingKey] = useState(null);
+
+  const handleTestConnection = async (key, service) => {
+    setTestingKey(key);
+    try {
+      const userToken = getActiveUserToken();
+      const res = await fetch('/api/auth/integrations/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify({ provider: key })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        if (onToast) onToast({ level: 'success', title: 'Connection Active', message: data.message || 'Connection verified successfully!' });
+      } else {
+        if (onToast) onToast({ level: 'error', title: 'Connection Failed', message: data.detail || data.message || 'Connection check failed.' });
+      }
+    } catch (err) {
+      if (onToast) onToast({ level: 'error', title: 'Verification Error', message: `Failed to verify: ${err.message}` });
+    } finally {
+      setTestingKey(null);
+    }
+  };
 
   // Sync with backend integrations & URL parameters on open / mount
   useEffect(() => {
@@ -312,25 +338,47 @@ export default function IntegrationsModal({ isOpen, onClose, onToast }) {
                 </div>
               </div>
 
-              <button
-                onClick={() => handleStartConnect(key, item)}
-                disabled={connectingKey === key}
-                style={{
-                  padding: '9px 18px',
-                  borderRadius: '10px',
-                  fontWeight: 700,
-                  fontSize: '0.8rem',
-                  cursor: 'pointer',
-                  border: item.connected ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid #00d4ff',
-                  background: item.connected ? 'rgba(239, 68, 68, 0.1)' : 'linear-gradient(135deg, #00d4ff, #7928ca)',
-                  color: item.connected ? '#ef4444' : '#ffffff',
-                  boxShadow: item.connected ? 'none' : '0 0 14px rgba(0, 212, 255, 0.25)',
-                  transition: 'all 0.2s ease',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {connectingKey === key ? 'Authenticating...' : item.connected ? 'Disconnect' : 'Connect OAuth'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {item.connected && (
+                  <button
+                    onClick={() => handleTestConnection(key, item)}
+                    disabled={testingKey === key}
+                    style={{
+                      padding: '9px 18px',
+                      borderRadius: '10px',
+                      fontWeight: 700,
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      border: '1px solid rgba(0, 212, 255, 0.4)',
+                      background: 'rgba(0, 212, 255, 0.08)',
+                      color: '#00d4ff',
+                      transition: 'all 0.2s ease',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {testingKey === key ? 'Verifying...' : '⚡ Test Connection'}
+                  </button>
+                )}
+                <button
+                  onClick={() => handleStartConnect(key, item)}
+                  disabled={connectingKey === key}
+                  style={{
+                    padding: '9px 18px',
+                    borderRadius: '10px',
+                    fontWeight: 700,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    border: item.connected ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid #00d4ff',
+                    background: item.connected ? 'rgba(239, 68, 68, 0.1)' : 'linear-gradient(135deg, #00d4ff, #7928ca)',
+                    color: item.connected ? '#ef4444' : '#ffffff',
+                    boxShadow: item.connected ? 'none' : '0 0 14px rgba(0, 212, 255, 0.25)',
+                    transition: 'all 0.2s ease',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {connectingKey === key ? 'Authenticating...' : item.connected ? 'Disconnect' : 'Connect OAuth'}
+                </button>
+              </div>
             </div>
           ))}
         </div>

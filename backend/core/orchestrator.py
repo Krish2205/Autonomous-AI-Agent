@@ -33,6 +33,21 @@ from backend.logger import get_logger
 
 logger = get_logger("core.orchestrator")
 
+def load_workspace_rules() -> str:
+    """Retrieve Project-Scoped Workspace Rules from .agents/AGENTS.md if they exist."""
+    import os
+    try:
+        paths = [
+            os.path.join(os.getcwd(), ".agents", "AGENTS.md"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".agents", "AGENTS.md")
+        ]
+        for p in paths:
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    return f.read()
+    except Exception as e:
+        logger.warning(f"Failed to read workspace rules: {e}")
+    return "No custom workspace rules defined."
 
 
 class Orchestrator:
@@ -142,12 +157,14 @@ class Orchestrator:
 
             # Step 1: Ask planner what to do next
             current_step_name.set(f"planner_step_{step_num}")
+            workspace_rules = load_workspace_rules()
             plan_step = self.planner.plan(
                 query=query, 
                 agent_descriptions=agent_descriptions,
                 valid_targets=valid_targets,
                 chat_history=chat_history, 
-                scratchpad=scratchpad
+                scratchpad=scratchpad,
+                workspace_rules=workspace_rules
             )
 
             if plan_step.action == "finish":
