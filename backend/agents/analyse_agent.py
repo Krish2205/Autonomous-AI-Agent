@@ -10,6 +10,7 @@ from functools import lru_cache
 import cohere
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.embeddings import Embeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -28,6 +29,29 @@ from backend.logger import get_logger
 logger = get_logger("agents.analyse")
 
 
+class CustomCohereEmbeddings(Embeddings):
+    """Custom wrapper for Cohere Embeddings to avoid PyTorch dependency issues."""
+    def __init__(self, api_key: str, model: str = "embed-english-v3.0"):
+        self.client = cohere.Client(api_key=api_key)
+        self.model = model
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        try:
+            res = self.client.embed(texts=texts, model=self.model, input_type="search_document")
+            return [list(map(float, emb)) for emb in res.embeddings]
+        except Exception as e:
+            logger.error(f"Cohere document embedding error: {e}")
+            raise e
+
+    def embed_query(self, text: str) -> list[float]:
+        try:
+            res = self.client.embed(texts=[text], model=self.model, input_type="search_query")
+            return list(map(float, res.embeddings[0]))
+        except Exception as e:
+            logger.error(f"Cohere query embedding error: {e}")
+            raise e
+
+
 class AnalyseAgent(BaseAgent):
     name = "analyse"
     description = "Analyze local files, documents, images, PDFs, or query information stored in local documents and databases."
@@ -39,8 +63,22 @@ class AnalyseAgent(BaseAgent):
                 model_kwargs={"local_files_only": True}
             )
         except Exception as e:
-            logger.warning(f"Could not load HuggingFaceEmbeddings offline: {e}. Falling back to online mode...")
-            self._embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+            logger.warning(f"Could not load HuggingFaceEmbeddings offline: {e}. Trying online HuggingFace embeddings...")
+            try:
+                self._embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+            except Exception as e2:
+                logger.error(f"Failed to load HuggingFaceEmbeddings: {e2}. Falling back to Cohere API embeddings...")
+                cohere_key = COHERE_API_KEY or os.environ.get("COHERE_API_KEY")
+                if cohere_key:
+                    try:
+                        self._embeddings = CustomCohereEmbeddings(api_key=cohere_key)
+                        logger.info("Successfully fell back to Cohere API embeddings!")
+                    except Exception as e3:
+                        logger.critical(f"Cohere embeddings fallback also failed: {e3}")
+                        raise e2
+                else:
+                    logger.critical("No Cohere API key available for fallback.")
+                    raise e2
 
     def _build_vector_db(self) -> FAISS | None:
         """Scan the documents folder and build a FAISS vector index."""

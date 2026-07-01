@@ -15,8 +15,6 @@ const getActiveUserToken = () => {
 
 export default function IntegrationsModal({ isOpen, onClose, onToast }) {
   const [activeCategory, setActiveCategory] = useState('All');
-  const [authPromptService, setAuthPromptService] = useState(null);
-  const [inputAccount, setInputAccount] = useState('');
   
   // Default initial state: ALL services are Not Connected unless saved in localStorage
   const defaultIntegrations = {
@@ -114,6 +112,29 @@ export default function IntegrationsModal({ isOpen, onClose, onToast }) {
     }
   }, [integrations]);
 
+  // Listen for message events from the OAuth popup
+  useEffect(() => {
+    const handleOAuthMessage = (event) => {
+      if (event.data && event.data.type === 'oauth_success') {
+        const { provider, email } = event.data;
+        setIntegrations(prev => ({
+          ...prev,
+          [provider]: {
+            ...prev[provider],
+            connected: true,
+            account: email
+          }
+        }));
+        if (onToast) onToast({ level: 'success', title: 'OAuth Verified & Connected!', message: `Successfully authenticated ${provider} as ${email}.` });
+      }
+    };
+
+    window.addEventListener('message', handleOAuthMessage);
+    return () => {
+      window.removeEventListener('message', handleOAuthMessage);
+    };
+  }, [onToast]);
+
   if (!isOpen) return null;
 
   const handleStartConnect = async (key, service) => {
@@ -135,60 +156,42 @@ export default function IntegrationsModal({ isOpen, onClose, onToast }) {
       }
       if (onToast) onToast({ level: 'warning', title: 'Service Disconnected', message: `Disconnected ${service.name}.` });
     } else {
+      const token = getActiveUserToken();
       if (key === 'google_workspace') {
         try {
-          const token = getActiveUserToken();
           const res = await fetch(`/api/auth/google/url?session_token=${token}`);
           const data = await res.json();
           if (data.oauth_url) {
-            if (onToast) onToast({ level: 'info', title: 'Redirecting to Google...', message: 'Opening official Google OAuth authorization page.' });
-            window.location.href = data.oauth_url;
+            if (onToast) onToast({ level: 'info', title: 'Redirecting to Google...', message: 'Opening Google OAuth authorization page.' });
+            
+            // Open Google OAuth in a popup window
+            const width = 600;
+            const height = 650;
+            const left = window.screen.width / 2 - width / 2;
+            const top = window.screen.height / 2 - height / 2;
+            window.open(
+              data.oauth_url,
+              'Google OAuth',
+              `width=${width},height=${height},left=${left},top=${top}`
+            );
             return;
           }
         } catch (err) {
           console.error("Failed to fetch Google OAuth URL:", err);
         }
+      } else {
+        // Open credentials popup window
+        const width = 500;
+        const height = 550;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        window.open(
+          `/api/auth/popup/${key}?session_token=${token}`,
+          `Connect ${service.name}`,
+          `width=${width},height=${height},left=${left},top=${top}`
+        );
       }
-      // Prompt for real account email/ID for other services
-      setAuthPromptService({ key, ...service });
-      setInputAccount('');
     }
-  };
-
-  const handleConfirmConnect = async (e) => {
-    e.preventDefault();
-    if (!inputAccount.trim()) return;
-
-    const key = authPromptService.key;
-    const name = authPromptService.name;
-    const userAccount = inputAccount.trim();
-
-    setAuthPromptService(null);
-    setConnectingKey(key);
-
-    try {
-      const token = localStorage.getItem('jarvis_session_token');
-      await fetch('/api/auth/integrations/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ provider: key, account: userAccount })
-      });
-    } catch (err) {
-      console.error("Failed to store backend OAuth connection:", err);
-    }
-
-    setTimeout(() => {
-      setIntegrations(prev => ({
-        ...prev,
-        [key]: { 
-          ...prev[key], 
-          connected: true, 
-          account: userAccount 
-        }
-      }));
-      setConnectingKey(null);
-      if (onToast) onToast({ level: 'success', title: 'OAuth Verified & Connected!', message: `Successfully authenticated ${name} as ${userAccount}.` });
-    }, 1000);
   };
 
   const categories = ['All', 'Education & Productivity', 'Developer & Cloud', 'Marketing & Growth', 'Finance & Legal', 'Team Collaboration'];
@@ -332,86 +335,6 @@ export default function IntegrationsModal({ isOpen, onClose, onToast }) {
           ))}
         </div>
 
-        {/* OAuth Authentication Input Sub-Modal */}
-        {authPromptService && (
-          <div style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(5, 8, 22, 0.95)',
-            backdropFilter: 'blur(10px)',
-            borderRadius: '24px',
-            padding: '32px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 10000,
-            animation: 'fadeIn 0.2s ease'
-          }}>
-            <div style={{ width: '100%', maxWidth: '420px', textAlign: 'center' }}>
-              <span style={{ fontSize: '3rem' }}>{authPromptService.icon}</span>
-              <h3 style={{ margin: '12px 0 6px 0', fontSize: '1.2rem', color: '#f8fafc' }}>Connect {authPromptService.name}</h3>
-              <p style={{ margin: 0, fontSize: '0.82rem', color: '#94a3b8', marginBottom: '20px' }}>
-                Enter your official account email or handle to authenticate OAuth permissions.
-              </p>
-
-              <form onSubmit={handleConfirmConnect} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <input
-                  type="text"
-                  placeholder={authPromptService.key.includes('whatsapp') ? "+91 98765 43210 (Phone Number)" : "your.email@organization.com"}
-                  value={inputAccount}
-                  onChange={(e) => setInputAccount(e.target.value)}
-                  autoFocus
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    background: 'rgba(15, 23, 42, 0.9)',
-                    border: '1px solid #00d4ff',
-                    borderRadius: '12px',
-                    color: '#f8fafc',
-                    fontSize: '0.9rem',
-                    outline: 'none',
-                    boxShadow: '0 0 15px rgba(0, 212, 255, 0.2)'
-                  }}
-                />
-
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setAuthPromptService(null)}
-                    style={{
-                      padding: '10px 20px',
-                      background: 'rgba(255, 255, 255, 0.08)',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      borderRadius: '10px',
-                      color: '#94a3b8',
-                      cursor: 'pointer',
-                      fontWeight: 600
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    style={{
-                      padding: '10px 24px',
-                      background: 'linear-gradient(135deg, #00d4ff, #7928ca)',
-                      border: 'none',
-                      borderRadius: '10px',
-                      color: '#ffffff',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      boxShadow: '0 0 15px rgba(0, 212, 255, 0.4)'
-                    }}
-                  >
-                    Authorize OAuth
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
 
         {/* Footer */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>

@@ -1064,6 +1064,7 @@ def build_custom_agent(request: BuildAgentRequest, current_user: str = Depends(g
 class ConnectIntegrationRequest(BaseModel):
     provider: str
     account: str
+    api_key: str | None = None
 
 
 @app.get("/api/auth/integrations")
@@ -1087,7 +1088,8 @@ def connect_user_integration(request: ConnectIntegrationRequest, current_user: s
     config["integrations"][request.provider] = {
         "connected": True,
         "account": request.account,
-        "connected_at": str(asyncio.get_event_loop().time())
+        "api_key": request.api_key,
+        "connected_at": str(time.time())
     }
     save_profile_config(current_user, config)
     logger.info(f"Connected provider '{request.provider}' for user '{current_user}' as '{request.account}'.")
@@ -1129,10 +1131,10 @@ def get_google_oauth_url(session_token: str = Query(default="default")):
     return {"status": "success", "oauth_url": auth_url}
 
 
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 import time
 
-@app.get("/api/auth/google/callback")
+@app.get("/api/auth/google/callback", response_class=HTMLResponse)
 def google_oauth_callback(code: str = Query(...), state: str = Query(default="default")):
     """Handles OAuth callback code from Google, exchanges for tokens, and redirects back to frontend."""
     logger.info(f"Received Google OAuth callback code for session state: {state}")
@@ -1201,8 +1203,349 @@ def google_oauth_callback(code: str = Query(...), state: str = Query(default="de
     except Exception as err:
         logger.error(f"Error saving profile config in OAuth callback: {err}")
     
-    frontend_url = f"http://localhost:5173/?connected_provider=google_workspace&email={urllib.parse.quote(user_email)}"
-    return RedirectResponse(url=frontend_url)
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Google Workspace OAuth Connection</title>
+        <script>
+            if (window.opener) {{
+                window.opener.postMessage({{
+                    type: 'oauth_success',
+                    provider: 'google_workspace',
+                    email: '{user_email}'
+                }}, '*');
+                window.close();
+            }} else {{
+                window.location.href = "http://localhost:5173/?connected_provider=google_workspace&email={urllib.parse.quote(user_email)}";
+            }}
+        </script>
+    </head>
+    <body style="background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
+        <div style="text-align: center; padding: 32px; background: #1e293b; border-radius: 16px; border: 1px solid #00d4ff; box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);">
+            <h2 style="margin: 0 0 8px 0; color: #00d4ff;">Google Workspace Connected!</h2>
+            <p style="margin: 0 0 20px 0; color: #94a3b8; font-size: 0.9rem;">Successfully authenticated as {user_email}</p>
+            <p style="margin: 0; color: #64748b; font-size: 0.8rem;">You can safely close this window now.</p>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+
+PROVIDER_METADATA = {
+    "whatsapp_cloud": {
+        "name": "WhatsApp Business Cloud API",
+        "icon": "📲",
+        "account_label": "Phone Number",
+        "account_placeholder": "+91 98765 43210",
+        "key_label": "WhatsApp API Token",
+        "key_placeholder": "EAAC...",
+        "key_type": "password"
+    },
+    "notion_notes": {
+        "name": "Notion Sync",
+        "icon": "📝",
+        "account_label": "Notion Email / ID",
+        "account_placeholder": "your.email@organization.com",
+        "key_label": "Notion Integration Token",
+        "key_placeholder": "secret_...",
+        "key_type": "password"
+    },
+    "github": {
+        "name": "GitHub & GitLab DevOps",
+        "icon": "🐙",
+        "account_label": "GitHub Username",
+        "account_placeholder": "your_github_username",
+        "key_label": "Personal Access Token",
+        "key_placeholder": "ghp_...",
+        "key_type": "password"
+    },
+    "aws_cloud": {
+        "name": "AWS & Cloud Infrastructure",
+        "icon": "☁️",
+        "account_label": "AWS Access Key ID",
+        "account_placeholder": "AKIA...",
+        "key_label": "AWS Secret Access Key",
+        "key_placeholder": "wJalrXUtn...",
+        "key_type": "password"
+    },
+    "docker_hub": {
+        "name": "Docker Hub",
+        "icon": "🐳",
+        "account_label": "Docker Hub Username",
+        "account_placeholder": "docker_user",
+        "key_label": "Access Token / Password",
+        "key_placeholder": "dckr_pat_...",
+        "key_type": "password"
+    },
+    "meta_ads": {
+        "name": "Meta Ads Manager",
+        "icon": "📢",
+        "account_label": "Meta Account Email",
+        "account_placeholder": "ads.manager@company.com",
+        "key_label": "Meta System User Access Token",
+        "key_placeholder": "EAA...",
+        "key_type": "password"
+    },
+    "google_analytics": {
+        "name": "Google Ads & GA4",
+        "icon": "📈",
+        "account_label": "GA4 Property ID",
+        "account_placeholder": "123456789",
+        "key_label": "Measurement Protocol API Secret",
+        "key_placeholder": "secret_...",
+        "key_type": "password"
+    },
+    "alpha_vantage": {
+        "name": "Bloomberg & Alpha Vantage",
+        "icon": "💵",
+        "account_label": "Alpha Vantage Email",
+        "account_placeholder": "finance@company.com",
+        "key_label": "Alpha Vantage API Key",
+        "key_placeholder": "Your API Key",
+        "key_type": "password"
+    },
+    "docusign": {
+        "name": "DocuSign E-Signature API",
+        "icon": "⚖️",
+        "account_label": "DocuSign Account Email",
+        "account_placeholder": "legal@company.com",
+        "key_label": "DocuSign Integration Key",
+        "key_placeholder": "Your Integration Key",
+        "key_type": "password"
+    },
+    "slack_teams": {
+        "name": "Slack & MS Teams",
+        "icon": "💬",
+        "account_label": "Slack Workspace Email",
+        "account_placeholder": "slack@company.com",
+        "key_label": "Slack Incoming Webhook URL",
+        "key_placeholder": "https://hooks.slack.com/services/...",
+        "key_type": "text"
+    }
+}
+
+
+@app.get("/api/auth/popup/{provider}", response_class=HTMLResponse)
+def get_integration_auth_popup(provider: str):
+    """Render a premium credentials input HTML page in a popup window for the given provider."""
+    if provider not in PROVIDER_METADATA:
+        raise HTTPException(status_code=404, detail="Provider not found")
+        
+    metadata = PROVIDER_METADATA[provider]
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Connect {metadata['name']}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {{
+                background: linear-gradient(135deg, #050816, #0b0f24);
+                color: #f8fafc;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                margin: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100vh;
+                overflow: hidden;
+            }}
+            .card {{
+                width: 100%;
+                max-width: 400px;
+                margin: 20px;
+                padding: 32px;
+                background: rgba(15, 23, 42, 0.85);
+                border: 1px solid rgba(0, 212, 255, 0.25);
+                border-radius: 20px;
+                box-shadow: 0 0 40px rgba(0, 212, 255, 0.15);
+                backdrop-filter: blur(12px);
+                text-align: center;
+                animation: slideIn 0.3s ease;
+            }}
+            @keyframes slideIn {{
+                from {{ transform: translateY(20px); opacity: 0; }}
+                to {{ transform: translateY(0); opacity: 1; }}
+            }}
+            .icon {{
+                font-size: 3.2rem;
+                margin-bottom: 12px;
+                display: inline-block;
+                filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.3));
+            }}
+            h2 {{
+                font-size: 1.3rem;
+                font-weight: 800;
+                margin: 0 0 8px 0;
+                letter-spacing: 0.5px;
+            }}
+            p {{
+                font-size: 0.8rem;
+                color: #94a3b8;
+                margin: 0 0 24px 0;
+                line-height: 1.4;
+            }}
+            .form-group {{
+                margin-bottom: 18px;
+                text-align: left;
+            }}
+            label {{
+                font-size: 0.72rem;
+                font-weight: 700;
+                color: #38bdf8;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 6px;
+                display: block;
+            }}
+            input {{
+                width: 100%;
+                padding: 11px 14px;
+                box-sizing: border-box;
+                background: rgba(10, 15, 30, 0.95);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                color: #ffffff;
+                font-size: 0.88rem;
+                outline: none;
+                transition: all 0.2s ease;
+            }}
+            input:focus {{
+                border-color: #00d4ff;
+                box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+            }}
+            .btn {{
+                width: 100%;
+                padding: 12px;
+                background: linear-gradient(135deg, #00d4ff, #7928ca);
+                border: none;
+                border-radius: 10px;
+                color: #ffffff;
+                font-size: 0.9rem;
+                font-weight: 700;
+                cursor: pointer;
+                box-shadow: 0 0 15px rgba(0, 212, 255, 0.3);
+                transition: all 0.2s ease;
+                margin-top: 8px;
+            }}
+            .btn:hover {{
+                box-shadow: 0 0 22px rgba(0, 212, 255, 0.5);
+                transform: translateY(-1px);
+            }}
+            .btn:active {{
+                transform: translateY(1px);
+            }}
+            .success-box {{
+                display: none;
+            }}
+            .success-checkmark {{
+                font-size: 3.5rem;
+                color: #22c55e;
+                margin-bottom: 12px;
+                animation: bounce 0.4s ease;
+            }}
+            @keyframes bounce {{
+                0%, 100% {{ transform: scale(1); }}
+                50% {{ transform: scale(1.15); }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="card" id="formCard">
+            <span class="icon">{metadata['icon']}</span>
+            <h2>Connect {metadata['name']}</h2>
+            <p>Provide your credentials to establish a secure connection with JARVIS.</p>
+            
+            <form id="connectForm">
+                <div class="form-group">
+                    <label>{metadata['account_label']}</label>
+                    <input type="text" id="accountInput" placeholder="{metadata['account_placeholder']}" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label>{metadata['key_label']}</label>
+                    <input type="{metadata['key_type']}" id="apiKeyInput" placeholder="{metadata['key_placeholder']}" required>
+                </div>
+                <button type="submit" class="btn" id="submitBtn">Save & Authenticate</button>
+            </form>
+        </div>
+
+        <div class="card success-box" id="successCard">
+            <div class="success-checkmark">🟢</div>
+            <h2 style="color: #22c55e;">Connection Successful!</h2>
+            <p style="margin-bottom: 0;">Successfully authenticated integration with JARVIS. This window will close automatically.</p>
+        </div>
+
+        <script>
+            const form = document.getElementById('connectForm');
+            const formCard = document.getElementById('formCard');
+            const successCard = document.getElementById('successCard');
+            const submitBtn = document.getElementById('submitBtn');
+            
+            // Extract session token from URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionToken = urlParams.get('session_token') || 'default';
+
+            form.addEventListener('submit', async (e) => {{
+                e.preventDefault();
+                const account = document.getElementById('accountInput').value.trim();
+                const apiKey = document.getElementById('apiKeyInput').value.trim();
+                
+                if (!account || !apiKey) return;
+                
+                submitBtn.innerText = 'Authenticating...';
+                submitBtn.disabled = true;
+                
+                try {{
+                    const res = await fetch('/api/auth/integrations/connect', {{
+                        method: 'POST',
+                        headers: {{
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ` + sessionToken
+                        }},
+                        body: JSON.stringify({{
+                            provider: '{provider}',
+                            account: account,
+                            api_key: apiKey
+                        }})
+                    }});
+                    
+                    if (res.ok) {{
+                        // Post message back to parent window
+                        if (window.opener) {{
+                            window.opener.postMessage({{
+                                type: 'oauth_success',
+                                provider: '{provider}',
+                                email: account
+                            }}, '*');
+                        }}
+                        
+                        formCard.style.display = 'none';
+                        successCard.style.display = 'block';
+                        
+                        setTimeout(() => {{
+                            window.close();
+                        }}, 1200);
+                    }} else {{
+                        const errData = await res.json();
+                        alert('Connection failed: ' + (errData.detail || 'Unknown error'));
+                        submitBtn.innerText = 'Save & Authenticate';
+                        submitBtn.disabled = false;
+                    }}
+                }} catch (err) {{
+                    console.error(err);
+                    alert('Connection error: ' + err.message);
+                    submitBtn.innerText = 'Save & Authenticate';
+                    submitBtn.disabled = false;
+                }}
+            }});
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
 
 # ── Terminal Execution Endpoint ──────────────────────────────────────

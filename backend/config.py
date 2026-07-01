@@ -163,24 +163,37 @@ def save_profile_config(user_id: str, config: dict) -> None:
 
 def load_enabled_agents(user_id: str) -> list[str]:
     """Load the list of enabled agent names for the specified user."""
-    config = load_profile_config(user_id)
-    if "enabled_agents" in config and config["enabled_agents"]:
-        return config["enabled_agents"]
-            
-    # Fallback to default roles if it matches a key in DEFAULT_ROLE_AGENTS
-    if user_id:
-        user_lower = user_id.lower()
-        for role, agents in DEFAULT_ROLE_AGENTS.items():
-            if role in user_lower or user_lower in role:
-                return agents
-            
-    # Fallback for all tools
-    return ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "ncert_lesson_architect", "cbse_exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse", "code"]
+    try:
+        from backend.agents import ALL_AGENTS
+        names = []
+        for agent_class in ALL_AGENTS:
+            if hasattr(agent_class, "name") and agent_class.name:
+                names.append(agent_class.name)
+        if names:
+            return list(set(names))
+    except Exception as e:
+        config_logger.warning(f"Failed dynamic load of all agents in load_enabled_agents: {e}")
+
+    # Fallback list of agents
+    return ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "ncert_lesson_architect", "cbse_exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse", "code", "devops", "cloud_infra", "github_workflow"]
 
 def save_enabled_agents(user_id: str, enabled_agents: list[str]) -> None:
     """Save the list of enabled agent names for the specified user."""
     config = load_profile_config(user_id)
     config["enabled_agents"] = enabled_agents
     save_profile_config(user_id, config)
+
+
+def get_user_integration(provider: str) -> dict:
+    """Fetch connected third-party integration configuration for the current active user."""
+    user_id = current_user_id.get()
+    keys_to_check = [user_id, "edtech_studio", "developer", "default"]
+    for k in keys_to_check:
+        if k:
+            cfg = load_profile_config(k).get("integrations", {}).get(provider, {})
+            if cfg.get("connected"):
+                return cfg
+    return {}
+
 
 

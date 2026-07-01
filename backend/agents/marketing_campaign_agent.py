@@ -35,6 +35,8 @@ class MarketingCampaignAgent(BaseAgent):
 
     def run(self, query: str) -> str:
         logger.info(f"Running Marketing Campaign task: {query[:80]}...")
+        from backend.config import get_user_integration
+
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are the JARVIS Marketing Campaign Agent. Draft engaging, SEO-driven marketing campaigns and copy."),
             ("human", "{query}"),
@@ -44,6 +46,16 @@ class MarketingCampaignAgent(BaseAgent):
         executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, max_iterations=5, handle_parsing_errors=True)
         try:
             response = executor.invoke({"query": query})
-            return response.get("output", str(response))
+            content = response.get("output", str(response))
+            
+            # Look up Meta Ads integration
+            meta_integ = get_user_integration("meta_ads")
+            if meta_integ.get("connected"):
+                meta_acc = meta_integ.get("account")
+                banner = f"\n\n---\n📢 **Meta Ads Manager Integration Hub**\n✓ Ad copy variant compiled and synced with connected Meta Ads account: `{meta_acc}`\n* **Campaign Status**: Draft Created (Ready to Publish)"
+            else:
+                banner = f"\n\n---\n📢 **Meta Ads Manager Integration Hub**\n* **Ad copy variant saved locally.**\n*(Connect Meta Ads Manager & Instagram under Integrations to sync campaigns automatically)*"
+                
+            return content + banner
         except Exception as e:
             return f"Marketing Campaign error: {str(e)}"

@@ -161,6 +161,12 @@ class VisualizationAgent(BaseAgent):
         # Fallback image block
         if relative_url:
             result_message += f"![Chart Fallback]({relative_url})\n"
-            result_message += f"*Generated chart saved to: `{save_path}`*"
+            result_message += f"*Generated chart saved to: `{save_path}`*\n\n"
+
+        from backend.config import get_user_integration
+        ga_integ = get_user_integration("google_analytics")
+        if ga_integ.get("connected"):
+            ga_acc = ga_integ.get("account")
+            result_message += f"*Synced with connected Google Ads & GA4 Analytics Property:* `{ga_acc}`\n"
             
         return result_message

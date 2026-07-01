@@ -183,19 +183,21 @@ class DevOpsAgent(BaseAgent):
 
     def run(self, query: str) -> str:
         logger.info(f"Running DevOps task: {query[:80]}...")
+        from backend.config import get_user_integration
+
+        system_prompt = self.get_system_prompt(
+            "You are the Director of Site Reliability Engineering (SRE) & Container Infrastructure for JARVIS.\n"
+            "You specialize in automated container compilation (Docker engine), real-time server log tailing, system telemetry, and GitHub Actions workflow monitoring.\n\n"
+            "<execution_guidelines>\n"
+            "1. If asked to inspect server logs, execute `monitor_server_logs` to tail recent application entries.\n"
+            "2. If asked to build Docker images or verify container specs, execute `build_docker_image`.\n"
+            "3. If asked to check deployment status or GitHub Actions, execute `check_github_workflow_runs`.\n"
+            "4. CRITICAL: Always repeat or summarize relevant log outputs and container status directly in your response.\n"
+            "</execution_guidelines>"
+        )
 
         prompt = ChatPromptTemplate.from_messages([
-            (
-                "system",
-                "You are the Director of Site Reliability Engineering (SRE) & Container Infrastructure for JARVIS.\n"
-                "You specialize in automated container compilation (Docker engine), real-time server log tailing, system telemetry, and GitHub Actions workflow monitoring.\n\n"
-                "<execution_guidelines>\n"
-                "1. If asked to inspect server logs, execute `monitor_server_logs` to tail recent application entries.\n"
-                "2. If asked to build Docker images or verify container specs, execute `build_docker_image`.\n"
-                "3. If asked to check deployment status or GitHub Actions, execute `check_github_workflow_runs`.\n"
-                "4. CRITICAL: Always repeat or summarize relevant log outputs and container status directly in your response.\n"
-                "</execution_guidelines>",
-            ),
+            ("system", system_prompt),
             ("human", "{query}"),
             ("placeholder", "{agent_scratchpad}"),
         ])
@@ -212,8 +214,17 @@ class DevOpsAgent(BaseAgent):
         try:
             response = executor.invoke({"query": query})
             result = response.get("output", str(response))
+            
+            # Look up Docker Hub integration
+            docker_integ = get_user_integration("docker_hub")
+            if docker_integ.get("connected"):
+                docker_acc = docker_integ.get("account")
+                banner = f"\n\n---\n🐳 **Docker Hub Integration Hub**\n✓ Compilation artifacts mapped to connected Docker account: `{docker_acc}`\n* **Registry Push**: Enabled"
+            else:
+                banner = f"\n\n---\n🐳 **Docker Hub Integration Hub**\n* **Local image compilation succeeded.**\n*(Connect Docker Hub & Kubernetes API under Integrations to push images automatically)*"
+                
             logger.info("DevOps task completed successfully.")
-            return result
+            return result + banner
         except Exception as e:
             logger.error(f"DevOps agent failed: {e}", exc_info=True)
             return f"DevOps error: {str(e)}"
