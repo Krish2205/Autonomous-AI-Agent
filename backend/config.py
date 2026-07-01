@@ -138,28 +138,55 @@ def get_profile_config_path(user_id: str) -> str:
     return os.path.join(db_dir, f"profile_{safe_user_id}.json")
 
 def load_profile_config(user_id: str) -> dict:
-    """Load the complete profile configuration for the user."""
+    """Load the complete profile configuration for the user from SQLite database."""
     if not user_id:
         return {}
+    try:
+        from backend.core.database import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT config FROM profile_configs WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row and row["config"]:
+            return json.loads(row["config"])
+    except Exception as e:
+        config_logger.error(f"Failed to load profile config for {user_id} from DB: {e}")
+        
+    # Fallback to loading from legacy file if it exists
     path = get_profile_config_path(user_id)
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                config_data = json.load(f)
+                # Automatically migrate legacy configuration to database
+                save_profile_config(user_id, config_data)
+                return config_data
         except Exception as e:
-            config_logger.error(f"Failed to load profile config for {user_id}: {e}")
+            config_logger.error(f"Failed to load legacy profile config file: {e}")
+            
     return {}
 
 def save_profile_config(user_id: str, config: dict) -> None:
-    """Save the complete profile configuration for the user."""
+    """Save the complete profile configuration for the user to SQLite database."""
     if not user_id:
         return
-    path = get_profile_config_path(user_id)
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2)
+        from backend.core.database import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        config_json = json.dumps(config, indent=2)
+        cursor.execute("""
+        INSERT INTO profile_configs (user_id, config, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id) DO UPDATE SET
+            config = excluded.config,
+            updated_at = CURRENT_TIMESTAMP
+        """, (user_id, config_json))
+        conn.commit()
+        conn.close()
     except Exception as e:
-        config_logger.error(f"Failed to save profile config for {user_id}: {e}")
+        config_logger.error(f"Failed to save profile config for {user_id} to DB: {e}")
 
 def load_enabled_agents(user_id: str) -> list[str]:
     """Load the list of enabled agent names for the specified user."""

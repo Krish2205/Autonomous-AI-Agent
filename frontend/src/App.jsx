@@ -175,7 +175,9 @@ export default function App() {
   useEffect(() => {
     setHasLoaded(false);
     if (user) {
-      const savedConvs = localStorage.getItem(`jarvis_conversations_${user.id}`);
+      const isLocal = user.email && user.email.endsWith('@local.jarvis');
+      const storageKey = isLocal ? 'jarvis_conversations_local' : `jarvis_conversations_${user.id}`;
+      const savedConvs = localStorage.getItem(storageKey);
       if (savedConvs) {
         try {
           setConversations(JSON.parse(savedConvs));
@@ -196,6 +198,8 @@ export default function App() {
   useEffect(() => {
     if (!user || !hasLoaded) return;
 
+    const isLocal = user.email && user.email.endsWith('@local.jarvis');
+    const storageKey = isLocal ? 'jarvis_conversations_local' : `jarvis_conversations_${user.id}`;
     if (conversations.length > 0) {
       const metadata = conversations.map(c => ({
         id: c.id,
@@ -204,9 +208,9 @@ export default function App() {
         createdAt: c.createdAt,
         messages: [] // Empty messages to fetch dynamically on load/click
       }));
-      localStorage.setItem(`jarvis_conversations_${user.id}`, JSON.stringify(metadata));
+      localStorage.setItem(storageKey, JSON.stringify(metadata));
     } else {
-      localStorage.removeItem(`jarvis_conversations_${user.id}`);
+      localStorage.removeItem(storageKey);
     }
   }, [conversations, user, hasLoaded]);
 

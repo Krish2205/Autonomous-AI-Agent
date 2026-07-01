@@ -55,6 +55,12 @@ app.add_middleware(
 app.mount("/images", StaticFiles(directory=GENERATED_IMAGES_DIR), name="images")
 
 # ── Initialize on startup ──────────────────────────────────────────
+from backend.core.database import init_db
+try:
+    init_db()
+except Exception as e:
+    logger.critical(f"Database bootstrap failed: {e}")
+
 registry = AgentRegistry()
 for AgentClass in ALL_AGENTS:
     registry.register(AgentClass())
