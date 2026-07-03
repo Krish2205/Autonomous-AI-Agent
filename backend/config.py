@@ -101,12 +101,12 @@ vision_llm = ChatGroq(
 
 # ── Model Settings ──────────────────────────────────────────────────
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-FAISS_SEARCH_K = 4
-RERANK_TOP_N = 3
+FAISS_SEARCH_K = 2
+RERANK_TOP_N = 2
 SEMANTIC_WEIGHT = 0.6
 KEYWORD_WEIGHT = 0.4
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 150
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 75
 
 
 # ── Workspace Profile Configuration ──────────────────────────────────
@@ -127,7 +127,7 @@ DEFAULT_ROLE_AGENTS = {
     "healthcare_researcher": ["biomedical_rag", "analyse", "search", "summary", "translation"],
     "creative_marketer": ["marketing_campaign", "multimedia_processor", "image_gen", "visualization", "search", "summary"],
     "legal_ops": ["legal_contract", "talent_ops", "summary", "search", "analyse"],
-    "edtech_studio": ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "ncert_lesson_architect", "cbse_exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse"]
+    "edtech_studio": ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "lesson_architect", "exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse"]
 }
 
 def get_profile_config_path(user_id: str) -> str:
@@ -202,7 +202,7 @@ def load_enabled_agents(user_id: str) -> list[str]:
         config_logger.warning(f"Failed dynamic load of all agents in load_enabled_agents: {e}")
 
     # Fallback list of agents
-    return ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "ncert_lesson_architect", "cbse_exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse", "code", "devops", "cloud_infra", "github_workflow"]
+    return ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "lesson_architect", "exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse", "code", "devops", "cloud_infra", "github_workflow"]
 
 def save_enabled_agents(user_id: str, enabled_agents: list[str]) -> None:
     """Save the list of enabled agent names for the specified user."""

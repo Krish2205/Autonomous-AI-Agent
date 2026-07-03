@@ -43,9 +43,10 @@ class ConversationMemory:
         return self.messages
 
     def get_context_string(self) -> str:
-        """Format the history as a string for inclusion in LLM prompts."""
+        """Format the history as a string for inclusion in LLM prompts (sliding window of the last 6 messages)."""
         formatted = []
-        for msg in self.messages:
+        recent_messages = self.messages[-6:] if len(self.messages) > 6 else self.messages
+        for msg in recent_messages:
             role = "User" if msg["role"] == "user" else "JARVIS"
             formatted.append(f"{role}: {msg['content']}")
         return "\n".join(formatted)

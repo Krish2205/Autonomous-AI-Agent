@@ -203,3 +203,35 @@ def send_gmail_message(to_email: str, subject: str, body_text: str, user_email: 
         "sent": sent_status,
         "sender": user_email if sent_status else "Not Authenticated"
     }
+
+
+def create_google_task_reminder(title: str, notes: str = "", due_iso: str = None, access_token: str = None, refresh_token: str = None) -> dict:
+    """Creates a task/reminder in the user's default Google Tasks list."""
+    logger.info(f"Creating Google Task '{title}'...")
+    active_token = access_token
+    if not active_token and refresh_token:
+        active_token = get_fresh_access_token(refresh_token)
+        
+    task_url = None
+    if active_token:
+        try:
+            payload = {"title": title, "notes": notes}
+            if due_iso:
+                payload["due"] = due_iso
+            resp = requests.post(
+                "https://tasks.googleapis.com/v1/lists/@default/tasks",
+                headers={
+                    "Authorization": f"Bearer {active_token}",
+                    "Content-Type": "application/json"
+                },
+                json=payload,
+                timeout=8
+            )
+            if resp.status_code == 200:
+                task_url = "https://tasks.google.com/"
+                logger.info("Successfully created Google Task.")
+            else:
+                logger.warning(f"Google Tasks API returned status {resp.status_code}: {resp.text}")
+        except Exception as e:
+            logger.error(f"Failed to create Google Task: {e}")
+    return {"title": title, "task_url": task_url or "https://tasks.google.com/"}

@@ -60,7 +60,7 @@ class Planner:
                 "Guidelines:\n"
                 "- Behave like an attentive, precise human assistant. Do ONLY what is explicitly asked in the user request. Do NOT assume, invent, or run unrequested actions or extra agents.\n"
                 "- TEXT/CODE REQUEST RULE: If the user is asking for code, a query, a command, a script, or an explanation (e.g., 'give me code to pull my repo', 'write a SQL query to...', 'how do I check...'), do NOT try to actually execute or perform the action on the system, and do NOT build a custom agent. Simply route the request to the 'code' agent (or another text agent) to generate and return the code/text directly, and then 'finish'.\n"
-                "- ACTION-ORIENTED EXECUTION RULE: When the user asks to create, build, set, or generate an action item (e.g. 'create a sheet for Class 2 sections A-F', 'set a meeting', 'draft lesson plan'), DO NOT call 'search' or return tutorial instructions! You MUST directly invoke the specific execution agent (e.g. 'sheets', 'calendar', 'ncert_lesson_architect') to execute the creation task immediately.\n"
+                "- ACTION-ORIENTED EXECUTION RULE: When the user asks to create, build, set, or generate an action item (e.g. 'create a sheet for Class 2 sections A-F', 'set a meeting', 'draft lesson plan'), DO NOT call 'search' or return tutorial instructions! You MUST directly invoke the specific execution agent (e.g. 'sheets', 'calendar', 'lesson_architect') to execute the creation task immediately. \n"
                 "- IMAGE GENERATION RULE: Only invoke the 'image_gen' agent if the user's explicit prompt specifically asks to generate, draw, or render an image, thumbnail, graphic, or picture. If the user did NOT explicitly ask for an image, NEVER invoke 'image_gen'.\n"
                 "- SCRIPT/MEDIA RULE: If the user specifically asks for video scripts or short scripts, invoke the corresponding media agent to generate them.\n"
                 "- If the user asks for a capability that you do not possess, use 'agent_builder' to build a new agent.\n"
@@ -86,14 +86,23 @@ class Planner:
         # Deterministic Direct Execution Override for Sheet / Calendar / Lesson creation tasks
         q_lower = query.lower()
         if not scratchpad or scratchpad == "No steps taken yet.":
-            if any(k in q_lower for k in ["paper check", "check paper", "grade paper", "evaluat", "rubric", "quiz", "fun activity"]):
+            if any(k in q_lower for k in ["test", "exam", "question paper", "worksheet"]):
+                if "exam_generator" in valid_targets:
+                    logger.info("Deterministic override: Routing test/exam/worksheet query directly to 'exam_generator'.")
+                    return PlannerStep(
+                        action="run_agent",
+                        target="exam_generator",
+                        query=query,
+                        thought="Directly executing question paper / exam / worksheet generation via 'exam_generator'."
+                    )
+            elif any(k in q_lower for k in ["paper check", "check paper", "grade paper", "evaluat", "rubric", "quiz", "fun activity", "activity", "activities", "game"]):
                 if "document_exam_scanner" in valid_targets:
-                    logger.info("Deterministic override: Routing paper checking / quiz query directly to 'document_exam_scanner'.")
+                    logger.info("Deterministic override: Routing paper checking / activity query directly to 'document_exam_scanner'.")
                     return PlannerStep(
                         action="run_agent",
                         target="document_exam_scanner",
                         query=query,
-                        thought="Directly executing paper checking and quiz generation via 'document_exam_scanner'."
+                        thought="Directly executing paper checking and activity generation via 'document_exam_scanner'."
                     )
             elif any(k in q_lower for k in ["diagram", "illustration", "flowchart", "blackboard art"]):
                 target_agent = "image_gen" if "image_gen" in valid_targets else "visualization"
@@ -105,16 +114,29 @@ class Planner:
                         query=query,
                         thought=f"Directly executing diagram creation via '{target_agent}' tool."
                     )
-            elif any(k in q_lower for k in ["lecture", "lesson", "curriculum", "syllabus", "unit plan", "speech"]):
-                if "ncert_lesson_architect" in valid_targets:
-                    logger.info("Deterministic override: Routing lesson plan query directly to 'ncert_lesson_architect'.")
+            elif any(k in q_lower for k in ["lecture", "lesson", "curriculum", "syllabus", "unit plan", "speech", "planner"]):
+                if "lesson_architect" in valid_targets:
+                    logger.info("Deterministic override: Routing lesson plan/planner query directly to 'lesson_architect'.")
                     return PlannerStep(
                         action="run_agent",
-                        target="ncert_lesson_architect",
+                        target="lesson_architect",
                         query=query,
-                        thought="Directly executing multi-day curriculum & lesson planning via 'ncert_lesson_architect'."
+                        thought="Directly executing multi-day curriculum & lesson planning via 'lesson_architect'."
                     )
-            elif any(k in q_lower for k in ["sheet", "spreadsheet", "gradebook", "mark-sheet", "marksheet", "attendance", "progress"]):
+            elif any(k in q_lower for k in ["timetable", "time table"]):
+                if "calendar" in q_lower or "event" in q_lower:
+                    target_agent = "calendar_scheduler_agent" if "calendar_scheduler_agent" in valid_targets else "calendar"
+                else:
+                    target_agent = "sheets" if "sheets" in valid_targets else "sheets_gradebook_agent"
+                if target_agent in valid_targets:
+                    logger.info(f"Deterministic override: Routing timetable query directly to '{target_agent}'.")
+                    return PlannerStep(
+                        action="run_agent",
+                        target=target_agent,
+                        query=query,
+                        thought=f"Directly executing timetable scheduling via '{target_agent}'."
+                    )
+            elif any(k in q_lower for k in ["spreadsheet", "gradebook", "mark-sheet", "marksheet", "attendance", "progress"]) or ("sheet" in q_lower and "worksheet" not in q_lower):
                 target_agent = "sheets_gradebook_agent" if "sheets_gradebook_agent" in valid_targets else "sheets"
                 if target_agent in valid_targets:
                     logger.info(f"Deterministic override: Routing sheet creation query directly to '{target_agent}'.")
@@ -123,6 +145,16 @@ class Planner:
                         target=target_agent,
                         query=query,
                         thought=f"Directly executing sheet creation via '{target_agent}' tool."
+                    )
+            elif any(k in q_lower for k in ["reminder", "note", "observation"]):
+                target_agent = "notes_manager_agent" if "notes_manager_agent" in valid_targets else "notes"
+                if target_agent in valid_targets:
+                    logger.info(f"Deterministic override: Routing note query directly to '{target_agent}'.")
+                    return PlannerStep(
+                        action="run_agent",
+                        target=target_agent,
+                        query=query,
+                        thought=f"Directly executing note/reminder creation via '{target_agent}'."
                     )
             elif ("meeting" in q_lower or "schedule" in q_lower or "calendar" in q_lower or "event" in q_lower) and "calendar" in valid_targets:
                 logger.info("Deterministic override: Routing calendar query directly to 'calendar'.")

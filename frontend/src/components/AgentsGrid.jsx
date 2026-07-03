@@ -41,8 +41,8 @@ const AGENT_ICONS = {
   sheets_gradebook_agent: { icon: '📊', tags: ['Sheets Sync', 'Gradebook'] },
   calendar_scheduler_agent: { icon: '📅', tags: ['Calendar Sync', 'PTM'] },
   notes_manager_agent: { icon: '📝', tags: ['Notes Sync', 'Observations'] },
-  ncert_lesson_architect: { icon: '📑', tags: ['Syllabus', 'Curriculum Plan'] },
-  cbse_exam_generator: { icon: '📝', tags: ['Exam Controller', 'Quizzes & Tests'] },
+  lesson_architect: { icon: '📑', tags: ['Syllabus', 'Curriculum Plan'] },
+  exam_generator: { icon: '📝', tags: ['Exam Controller', 'Quizzes & Tests'] },
   whatsapp_notice_curator: { icon: '📲', tags: ['WhatsApp Broadcast'] },
   hinglish_socratic_tutor: { icon: '🧠', tags: ['Hinglish STEM', 'Analogies'] },
   cce_report_card_architect: { icon: '📊', tags: ['CCE Remarks', 'PTM'] }

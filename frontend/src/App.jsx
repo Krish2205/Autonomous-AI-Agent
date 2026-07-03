@@ -540,14 +540,18 @@ export default function App() {
   };
 
   // ── Upload file ──────────────────────────────────────────────
-  const handleUpload = useCallback(async (file) => {
+  const handleUpload = useCallback(async (file, preventRedirect = false) => {
     if (!sessionToken) return;
     setIsUploading(true);
     let convId = activeConversationId;
 
     if (!convId) {
-      convId = createNewChat();
-      await new Promise(resolve => setTimeout(resolve, 0));
+      if (preventRedirect) {
+        convId = "temp_upload";
+      } else {
+        convId = createNewChat();
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
     }
 
     const formData = new FormData();
@@ -570,38 +574,47 @@ export default function App() {
       const data = await response.json();
       window.reloadWorkspaceFiles?.();
 
-      const systemMessage = {
-        id: generateId(),
-        role: 'jarvis',
-        content: `📁 **File Uploaded Successfully:** \`${data.filename}\` has been parsed and indexed. You can now ask questions about its content!`,
-        timestamp: new Date().toISOString(),
-      };
+      if (convId !== "temp_upload") {
+        const systemMessage = {
+          id: generateId(),
+          role: 'jarvis',
+          content: `📁 **File Uploaded Successfully:** \`${data.filename}\` has been parsed and indexed. You can now ask questions about its content!`,
+          timestamp: new Date().toISOString(),
+        };
 
-      setConversations(prev => prev.map(c => {
-        if (c.id === convId) {
-          return { ...c, messages: [...c.messages, systemMessage] };
-        }
-        return c;
-      }));
+        setConversations(prev => prev.map(c => {
+          if (c.id === convId) {
+            return { ...c, messages: [...c.messages, systemMessage] };
+          }
+          return c;
+        }));
+      } else {
+        handleToast({ title: "File Uploaded", message: `"${data.filename}" uploaded and indexed successfully.`, level: "success" });
+      }
 
     } catch (error) {
-      const errorMessage = {
-        id: generateId(),
-        role: 'jarvis',
-        content: `❌ **Upload Error:** ${error.message}`,
-        timestamp: new Date().toISOString(),
-      };
+      console.error(error);
+      if (convId !== "temp_upload") {
+        const errorMessage = {
+          id: generateId(),
+          role: 'jarvis',
+          content: `❌ **Upload Error:** ${error.message}`,
+          timestamp: new Date().toISOString(),
+        };
 
-      setConversations(prev => prev.map(c => {
-        if (c.id === convId) {
-          return { ...c, messages: [...c.messages, errorMessage] };
-        }
-        return c;
-      }));
+        setConversations(prev => prev.map(c => {
+          if (c.id === convId) {
+            return { ...c, messages: [...c.messages, errorMessage] };
+          }
+          return c;
+        }));
+      } else {
+        handleToast({ title: "Upload Error", message: error.message, level: "error" });
+      }
     } finally {
       setIsUploading(false);
     }
-  }, [activeConversationId, createNewChat, sessionToken]);
+  }, [activeConversationId, createNewChat, sessionToken, handleToast]);
 
   // ── Delete conversation ──────────────────────────────────────
   const handleDeleteConversation = useCallback(async (id) => {
@@ -702,6 +715,10 @@ export default function App() {
           setActiveTab={setActiveTab}
           onToggleDevPanel={() => setIsDevPanelOpen(true)}
           onToggleBuilderPanel={() => setIsBuilderPanelOpen(true)}
+          onGoHome={() => {
+            setActiveConversationId(null);
+            setActiveTab('chats');
+          }}
         />
 
         <div className="main-area">
@@ -730,40 +747,38 @@ export default function App() {
             }}>
               {(activeTab === 'chats' || activeTab === 'search') && (
                 <>
-                  {showWelcome ? (
-                    (user?.id === 'edtech_studio' || activeProfile?.id === 'edtech_studio') ? (
-                      <TeacherStudioDashboard
-                        onSend={handleSend}
-                        isLoading={isLoading}
-                        onUpload={handleUpload}
-                        isUploading={isUploading}
-                      />
-                    ) : (
-                      <div className="welcome-container">
-                        <div className="welcome-icon">{activeProfile?.emoji || '🤖'}</div>
-                        <h1 className="welcome-title">{activeProfile?.title || 'Welcome to JARVIS'}</h1>
-                        <p className="welcome-subtitle">
-                          {activeProfile?.subtitle || "Your autonomous AI operating system. Ask me anything — I'll orchestrate specialized agents to execute your requests."}
-                        </p>
-                        <div className="prompt-chips">
-                          {(activeProfile?.chips || [
-                            "🔍 Search for the latest AI breakthroughs",
-                            "📊 Analyze my uploaded documents",
-                            "💻 Write a Python web scraper",
-                            "📝 Summarize a research topic"
-                          ]).map((prompt, i) => (
-                            <button
-                              key={i}
-                              className="prompt-chip"
-                              onClick={() => handleSend(prompt.replace(/^[^\s]+\s/, ''))}
-                              disabled={isLoading}
-                            >
-                              {prompt}
-                            </button>
-                          ))}
-                        </div>
+                  {(!activeConversationId && (user?.id === 'edtech_studio' || activeProfile?.id === 'edtech_studio')) ? (
+                    <TeacherStudioDashboard
+                      onSend={handleSend}
+                      isLoading={isLoading}
+                      onUpload={handleUpload}
+                      isUploading={isUploading}
+                    />
+                  ) : showWelcome ? (
+                    <div className="welcome-container">
+                      <div className="welcome-icon">{activeProfile?.emoji || '🤖'}</div>
+                      <h1 className="welcome-title">{activeProfile?.title || 'Welcome to JARVIS'}</h1>
+                      <p className="welcome-subtitle">
+                        {activeProfile?.subtitle || "Your autonomous AI operating system. Ask me anything — I'll orchestrate specialized agents to execute your requests."}
+                      </p>
+                      <div className="prompt-chips">
+                        {(activeProfile?.chips || [
+                          "🔍 Search for the latest AI breakthroughs",
+                          "📊 Analyze my uploaded documents",
+                          "💻 Write a Python web scraper",
+                          "📝 Summarize a research topic"
+                        ]).map((prompt, i) => (
+                          <button
+                            key={i}
+                            className="prompt-chip"
+                            onClick={() => handleSend(prompt.replace(/^[^\s]+\s/, ''))}
+                            disabled={isLoading}
+                          >
+                            {prompt}
+                          </button>
+                        ))}
                       </div>
-                    )
+                    </div>
                   ) : (
                     <div className="chat-messages" id="chat-messages">
                       {messages.map((msg, idx) => (
@@ -781,13 +796,15 @@ export default function App() {
                     </div>
                   )}
 
-                  <ChatInput
-                    onSend={handleSend}
-                    onUpload={handleUpload}
-                    isLoading={isLoading}
-                    isUploading={isUploading}
-                    showSuggestions={false}
-                  />
+                  {!((user?.id === 'edtech_studio' || activeProfile?.id === 'edtech_studio') && !activeConversationId) && (
+                    <ChatInput
+                      onSend={handleSend}
+                      onUpload={handleUpload}
+                      isLoading={isLoading}
+                      isUploading={isUploading}
+                      showSuggestions={false}
+                    />
+                  )}
                 </>
               )}
 
