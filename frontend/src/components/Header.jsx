@@ -1,21 +1,41 @@
-export default function Header({ isOnline, agentCount, version, sidebarOpen, onToggleSidebar, user, onLogout, onDeleteActiveWorkspace, onToggleDevPanel, onToggleBuilderPanel }) {
+export default function Header({ isOnline, agentCount, version, sidebarOpen, onToggleSidebar, user, onLogout, onDeleteActiveWorkspace, onToggleDevPanel, onToggleBuilderPanel, activeProfile, onToggleIntegrations }) {
   return (
     <header className="header" id="jarvis-header">
       <div className="header-left">
         <span style={{
-          fontSize: '0.9rem',
+          fontSize: '0.85rem',
           fontWeight: 800,
-          letterSpacing: '2px',
+          letterSpacing: '1.5px',
           background: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-violet))',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           textTransform: 'uppercase'
         }}>
-          Multi-Agent AI System
+          JARVIS OS
         </span>
       </div>
 
       <div className="header-center">
+        {activeProfile && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '4px 14px',
+            background: 'rgba(0, 212, 255, 0.08)',
+            border: '1px solid rgba(0, 212, 255, 0.25)',
+            borderRadius: '99px',
+            color: '#00d4ff',
+            fontSize: '0.76rem',
+            fontWeight: 800,
+            letterSpacing: '1px',
+            textTransform: 'uppercase',
+            boxShadow: '0 0 12px rgba(0, 212, 255, 0.15)'
+          }}>
+            <span>{activeProfile.emoji || '📂'}</span>
+            <span>{activeProfile.name || activeProfile.id}</span>
+          </div>
+        )}
       </div>
 
       <div className="header-right">
@@ -27,6 +47,26 @@ export default function Header({ isOnline, agentCount, version, sidebarOpen, onT
             </div>
 
             <div className="user-actions">
+              <button
+                className="user-action-btn"
+                onClick={onToggleIntegrations}
+                style={{
+                  background: 'rgba(0, 212, 255, 0.12)',
+                  border: '1px solid rgba(0, 212, 255, 0.3)',
+                  color: '#00d4ff',
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+                title="Manage Third-Party Integrations & OAuth"
+              >
+                <span>🔌</span> Integrations
+              </button>
               <button
                 className="user-action-btn btn-logout"
                 onClick={onLogout}

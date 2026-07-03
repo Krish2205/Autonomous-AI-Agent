@@ -7,6 +7,7 @@ const PROFILE_OPTIONS = [
   { id: 'cybersec_auditor', name: 'Cybersecurity Audit', category: 'Engineering & IT', emoji: '🛡️', desc: 'CVE vulnerability audits, syslog threat triage & zero-trust compliance', agents: ['SecOps', 'Compliance', 'Analyse', 'Summary'] },
   { id: 'financial_analyst', name: 'Financial Analyst', category: 'Finance & Legal', emoji: '📈', desc: 'Executive P&L statements, cash flow projections & stock fundamentals', agents: ['Financial Reporting', 'Market Intel', 'Finance', 'Visualization'] },
   { id: 'legal_ops', name: 'Legal & HR Operations', category: 'Finance & Legal', emoji: '⚖️', desc: 'Contract NDA risk evaluation, indemnification caps & talent hiring rubrics', agents: ['Legal Contract', 'Talent Ops', 'Compliance', 'Email'] },
+  { id: 'edtech_studio', name: 'Bharat Adaptive Learning Studio', category: 'Education & Teaching', emoji: '🇮🇳', desc: 'Teacher Executive Copilot with Google Sheets, Calendar, Notes, doc exam scanning & WhatsApp broadcasts', agents: ['Teacher Copilot', 'Sheets', 'Calendar', 'Notes', 'Doc Exam Scanner', 'CBSE Exam Studio', 'WhatsApp Notices'] },
   { id: 'healthcare_researcher', name: 'Medical RAG Research', category: 'Research & Growth', emoji: '🧬', desc: 'PubMed literature indexing, clinical trial phase synthesis & pharmacology', agents: ['Biomedical RAG', 'Analyse', 'Summary', 'Search'] },
   { id: 'creative_marketer', name: 'Growth Marketing', category: 'Research & Growth', emoji: '🚀', desc: 'SEO keyword strategies, viral ad copy hooks & production video scripts', agents: ['Marketing Campaign', 'Multimedia Processor', 'Image Gen', 'Search'] },
   { id: 'analyst', name: 'Data Intelligence', category: 'Research & Growth', emoji: '📊', desc: 'Relational SQLite SQL operations, dynamic charts & statistical matrices', agents: ['Database', 'Visualization', 'Analyse', 'Summary'] },
@@ -132,7 +133,7 @@ export default function Login({ onAuthSuccess }) {
     setIsLoading(false);
   };
 
-  const categories = ['All', 'Engineering & IT', 'Finance & Legal', 'Research & Growth', 'General & Executive'];
+  const categories = ['All', 'Engineering & IT', 'Finance & Legal', 'Education & Teaching', 'Research & Growth', 'General & Executive'];
 
   const filteredProfiles = activeCategory === 'All' 
     ? PROFILE_OPTIONS 

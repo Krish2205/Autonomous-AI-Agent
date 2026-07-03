@@ -86,13 +86,24 @@ class NotificationAgent(BaseAgent):
             logger.error(f"Failed to broadcast local alert: {e}")
             in_app_status = f"✕ Failed to trigger in-app alert locally: {e}"
 
+        # Look up Slack integration
+        from backend.config import get_user_integration
+        slack_integ = get_user_integration("slack_teams")
+        
+        webhook_url = SLACK_WEBHOOK_URL
+        slack_account = None
+        if slack_integ.get("connected"):
+            slack_account = slack_integ.get("account")
+            if slack_integ.get("api_key"):
+                webhook_url = slack_integ.get("api_key")
+
         # Step 3: Trigger Slack Notification (via Webhook)
         slack_status = "Not requested."
         if send_to_slack:
-            if not SLACK_WEBHOOK_URL or "YOUR/WEBHOOK/URL" in SLACK_WEBHOOK_URL:
+            if not webhook_url or "YOUR/WEBHOOK/URL" in webhook_url:
                 slack_status = (
                     "✕ Slack webhook URL is not configured. "
-                    "To enable, set `SLACK_WEBHOOK_URL` in your `.env` file."
+                    "To enable, connect Slack & Microsoft Teams under Integrations or set `SLACK_WEBHOOK_URL` in your `.env` file."
                 )
                 logger.warning("Slack webhook URL not configured.")
             else:
@@ -108,9 +119,10 @@ class NotificationAgent(BaseAgent):
                     slack_payload = {
                         "text": f"{slack_emoji} *{title}*\n{message}"
                     }
-                    response = requests.post(SLACK_WEBHOOK_URL, json=slack_payload, timeout=10)
+                    response = requests.post(webhook_url, json=slack_payload, timeout=10)
                     if response.status_code == 200:
-                        slack_status = "✓ Posted notification to Slack channel."
+                        account_info = f" (Workspace account: `{slack_account}`)" if slack_account else ""
+                        slack_status = f"✓ Posted notification to connected Slack channel{account_info}."
                         logger.info("Successfully posted to Slack webhook.")
                     else:
                         slack_status = f"✕ Slack API returned status code {response.status_code}: {response.text}"

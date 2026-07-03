@@ -101,12 +101,12 @@ vision_llm = ChatGroq(
 
 # ── Model Settings ──────────────────────────────────────────────────
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-FAISS_SEARCH_K = 4
-RERANK_TOP_N = 3
+FAISS_SEARCH_K = 2
+RERANK_TOP_N = 2
 SEMANTIC_WEIGHT = 0.6
 KEYWORD_WEIGHT = 0.4
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 150
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 75
 
 
 # ── Workspace Profile Configuration ──────────────────────────────────
@@ -116,17 +116,18 @@ import logging
 config_logger = logging.getLogger("config")
 
 DEFAULT_ROLE_AGENTS = {
-    "developer": ["code", "devops", "package_manager", "database", "search", "summary", "agent_builder", "visualization", "scraper", "dev_team"],
-    "analyst": ["analyse", "visualization", "finance", "database", "search", "summary", "scraper", "analyst_team"],
+    "developer": ["code", "devops", "package_manager", "database", "search", "summary", "agent_builder", "visualization", "scraper", "dev_team", "sheets", "calendar", "notes"],
+    "analyst": ["analyse", "visualization", "finance", "database", "search", "summary", "scraper", "analyst_team", "sheets", "calendar"],
     "designer": ["image_gen", "visualization", "search", "summary", "translation"],
-    "manager": ["calendar", "email", "notification", "summary", "search", "ops_team"],
+    "manager": ["calendar", "email", "notification", "summary", "search", "ops_team", "sheets", "notes"],
     "guest": ["search", "summary", "translation"],
     "cloud_devops": ["cloud_infra", "github_workflow", "devops", "code", "package_manager", "database", "search", "summary"],
-    "financial_analyst": ["market_intelligence", "financial_reporting", "finance", "analyse", "visualization", "database", "search", "summary"],
+    "financial_analyst": ["market_intelligence", "financial_reporting", "finance", "analyse", "visualization", "database", "search", "summary", "sheets"],
     "cybersec_auditor": ["sec_ops", "compliance", "code", "database", "search", "summary"],
     "healthcare_researcher": ["biomedical_rag", "analyse", "search", "summary", "translation"],
     "creative_marketer": ["marketing_campaign", "multimedia_processor", "image_gen", "visualization", "search", "summary"],
-    "legal_ops": ["legal_contract", "talent_ops", "summary", "search", "analyse"]
+    "legal_ops": ["legal_contract", "talent_ops", "summary", "search", "analyse"],
+    "edtech_studio": ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "lesson_architect", "exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse"]
 }
 
 def get_profile_config_path(user_id: str) -> str:
@@ -137,48 +138,89 @@ def get_profile_config_path(user_id: str) -> str:
     return os.path.join(db_dir, f"profile_{safe_user_id}.json")
 
 def load_profile_config(user_id: str) -> dict:
-    """Load the complete profile configuration for the user."""
+    """Load the complete profile configuration for the user from SQLite database."""
     if not user_id:
         return {}
+    try:
+        from backend.core.database import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT config FROM profile_configs WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row and row["config"]:
+            return json.loads(row["config"])
+    except Exception as e:
+        config_logger.error(f"Failed to load profile config for {user_id} from DB: {e}")
+        
+    # Fallback to loading from legacy file if it exists
     path = get_profile_config_path(user_id)
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                config_data = json.load(f)
+                # Automatically migrate legacy configuration to database
+                save_profile_config(user_id, config_data)
+                return config_data
         except Exception as e:
-            config_logger.error(f"Failed to load profile config for {user_id}: {e}")
+            config_logger.error(f"Failed to load legacy profile config file: {e}")
+            
     return {}
 
 def save_profile_config(user_id: str, config: dict) -> None:
-    """Save the complete profile configuration for the user."""
+    """Save the complete profile configuration for the user to SQLite database."""
     if not user_id:
         return
-    path = get_profile_config_path(user_id)
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2)
+        from backend.core.database import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        config_json = json.dumps(config, indent=2)
+        cursor.execute("""
+        INSERT INTO profile_configs (user_id, config, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id) DO UPDATE SET
+            config = excluded.config,
+            updated_at = CURRENT_TIMESTAMP
+        """, (user_id, config_json))
+        conn.commit()
+        conn.close()
     except Exception as e:
-        config_logger.error(f"Failed to save profile config for {user_id}: {e}")
+        config_logger.error(f"Failed to save profile config for {user_id} to DB: {e}")
 
 def load_enabled_agents(user_id: str) -> list[str]:
     """Load the list of enabled agent names for the specified user."""
-    config = load_profile_config(user_id)
-    if "enabled_agents" in config:
-        return config["enabled_agents"]
-            
-    # Fallback to default roles if it matches a key in DEFAULT_ROLE_AGENTS
-    user_lower = user_id.lower()
-    for role, agents in DEFAULT_ROLE_AGENTS.items():
-        if role in user_lower:
-            return agents
-            
-    # Default fallback for custom or unknown workspaces: basic search and summary agents
-    return ["search", "summary"]
+    try:
+        from backend.agents import ALL_AGENTS
+        names = []
+        for agent_class in ALL_AGENTS:
+            if hasattr(agent_class, "name") and agent_class.name:
+                names.append(agent_class.name)
+        if names:
+            return list(set(names))
+    except Exception as e:
+        config_logger.warning(f"Failed dynamic load of all agents in load_enabled_agents: {e}")
+
+    # Fallback list of agents
+    return ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "lesson_architect", "exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse", "code", "devops", "cloud_infra", "github_workflow"]
 
 def save_enabled_agents(user_id: str, enabled_agents: list[str]) -> None:
     """Save the list of enabled agent names for the specified user."""
     config = load_profile_config(user_id)
     config["enabled_agents"] = enabled_agents
     save_profile_config(user_id, config)
+
+
+def get_user_integration(provider: str) -> dict:
+    """Fetch connected third-party integration configuration for the current active user."""
+    user_id = current_user_id.get()
+    keys_to_check = [user_id, "edtech_studio", "developer", "default"]
+    for k in keys_to_check:
+        if k:
+            cfg = load_profile_config(k).get("integrations", {}).get(provider, {})
+            if cfg.get("connected"):
+                return cfg
+    return {}
+
 
 

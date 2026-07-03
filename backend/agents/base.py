@@ -55,14 +55,33 @@ class BaseAgent(ABC):
             callbacks=[analytics_handler]
         )
 
-    def get_system_prompt(self, default_prompt: str) -> str:
-        """Get the custom system prompt for this agent based on current user configuration."""
+    def get_system_prompt(self, default_prompt: str = "") -> str:
+        """Get the system prompt for this agent, resolved dynamically based on active profile."""
         from backend.config import current_user_id, load_profile_config
-        user_id = current_user_id.get()
-        if user_id:
-            config = load_profile_config(user_id)
-            return config.get("agent_configs", {}).get(self.name, {}).get("system_prompt", default_prompt)
-        return default_prompt
+        from backend.agent_prompts import get_agent_prompt
+        
+        user_id = current_user_id.get() or "developer"
+        
+        # Load user configuration override if it exists
+        config = load_profile_config(user_id)
+        override_prompt = config.get("agent_configs", {}).get(self.name, {}).get("system_prompt")
+        
+        if override_prompt:
+            custom_prompt = override_prompt
+        else:
+            # Load specialized or default prompt from agent_prompts.py
+            custom_prompt = get_agent_prompt(user_id, self.name, default_prompt)
+            
+        # Lazy import to avoid circular dependency at module import time
+        try:
+            from backend.core.orchestrator import get_expertise
+            expertise_prompt = get_expertise(self.name)
+        except Exception:
+            expertise_prompt = ""
+            
+        if expertise_prompt:
+            return f"{expertise_prompt}\n\n{custom_prompt}"
+        return custom_prompt
 
     def __repr__(self) -> str:
         return f"<Agent:{self.name}>"

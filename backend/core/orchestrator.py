@@ -10,6 +10,22 @@ from backend.config import current_user_id, load_enabled_agents
 from backend.core.registry import AgentRegistry
 from backend.core.planner import Planner, PlannerStep
 from backend.core.synthesizer import Synthesizer
+import yaml
+import os
+
+# Load agent expertise prompts from YAML configuration
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "agent_expertise.yaml")
+if os.path.exists(CONFIG_PATH):
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        AGENT_EXPERTISE = yaml.safe_load(f) or {}
+else:
+    AGENT_EXPERTISE = {}
+
+def get_expertise(agent_name: str) -> str:
+    """Retrieve the expertise system prompt for a given agent name.
+    Returns an empty string if no specific prompt is defined.
+    """
+    return AGENT_EXPERTISE.get(agent_name, "")
 from backend.core.memory import ConversationMemory
 from backend.core.analytics import current_session_id, current_query_id, current_step_name
 from backend.core.notifications import notification_manager
@@ -17,6 +33,21 @@ from backend.logger import get_logger
 
 logger = get_logger("core.orchestrator")
 
+def load_workspace_rules() -> str:
+    """Retrieve Project-Scoped Workspace Rules from .agents/AGENTS.md if they exist."""
+    import os
+    try:
+        paths = [
+            os.path.join(os.getcwd(), ".agents", "AGENTS.md"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".agents", "AGENTS.md")
+        ]
+        for p in paths:
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    return f.read()
+    except Exception as e:
+        logger.warning(f"Failed to read workspace rules: {e}")
+    return "No custom workspace rules defined."
 
 
 class Orchestrator:
@@ -126,12 +157,14 @@ class Orchestrator:
 
             # Step 1: Ask planner what to do next
             current_step_name.set(f"planner_step_{step_num}")
+            workspace_rules = load_workspace_rules()
             plan_step = self.planner.plan(
                 query=query, 
                 agent_descriptions=agent_descriptions,
                 valid_targets=valid_targets,
                 chat_history=chat_history, 
-                scratchpad=scratchpad
+                scratchpad=scratchpad,
+                workspace_rules=workspace_rules
             )
 
             if plan_step.action == "finish":
@@ -214,7 +247,12 @@ class Orchestrator:
 
         # Step 3: Synthesize (with history context)
         current_step_name.set("synthesizer")
-        final_response = self.synthesizer.synthesize(query, combined_results, chat_history=chat_history)
+        sheets_or_doc_step = next((s for s in steps_taken if "Google Sheets App" in s["result"] or "google_sheets" in s["result"] or "/exports/" in s["result"] or "Click Here to Download" in s["result"]), None)
+        if sheets_or_doc_step:
+            logger.info(f"Direct document/sheet creation detected in step '{sheets_or_doc_step['agent']}'. Delivering output directly.")
+            final_response = sheets_or_doc_step["result"]
+        else:
+            final_response = self.synthesizer.synthesize(query, combined_results, chat_history=chat_history)
 
         # Step 4: Save turn to memory
         memory.add_message("user", query)

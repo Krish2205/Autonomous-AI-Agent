@@ -15,6 +15,7 @@ export default function Sidebar({
   setActiveTab,
   onToggleDevPanel,
   onToggleBuilderPanel,
+  onGoHome,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -62,6 +63,26 @@ export default function Sidebar({
 
         {/* Menu Navigation Options */}
         <div className="sidebar-nav-menu" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '2px', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', flexShrink: 0 }}>
+          {onGoHome && (
+            <button 
+              className="nav-menu-item"
+              onClick={onGoHome}
+              title="Dashboard"
+              style={{ 
+                background: 'rgba(167, 139, 250, 0.12)', 
+                border: '1px solid rgba(167, 139, 250, 0.3)', 
+                color: '#a78bfa',
+                textAlign: 'left', 
+                width: '100%',
+                marginBottom: '6px',
+                borderRadius: '8px'
+              }}
+            >
+              <span className="nav-menu-icon" style={{ fontSize: '1.1rem', marginRight: isOpen ? '12px' : '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🏫</span>
+              {isOpen && <span className="nav-menu-text" style={{ fontWeight: 'bold' }}>Dashboard</span>}
+            </button>
+          )}
+
           <button 
             className="nav-menu-item"
             onClick={() => {

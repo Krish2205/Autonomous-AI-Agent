@@ -34,7 +34,7 @@ function formatTimestamp(ts) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function parseMarkdown(text, sessionToken) {
+function parseMarkdown(text, sessionToken, onSelectArtifact) {
   if (!text) return '';
 
   // Split by code blocks first
@@ -49,8 +49,9 @@ function parseMarkdown(text, sessionToken) {
       const firstLine = lines[0].trim();
       const isLangTag = firstLine && !firstLine.includes(' ') && firstLine.length < 20;
       const code = isLangTag ? lines.slice(1).join('\n') : inner;
+      const lang = isLangTag ? firstLine : 'text';
 
-      if (firstLine === 'chart') {
+      if (lang === 'chart') {
         try {
           const chartData = JSON.parse(code.trim());
           return <InteractiveChart key={i} spec={chartData} />;
@@ -58,6 +59,62 @@ function parseMarkdown(text, sessionToken) {
           console.error("Failed to parse chart spec JSON", err);
           return <pre key={i}><code>{code.trim()}</code></pre>;
         }
+      }
+
+      const isArtifactable = ['html', 'svg', 'csv', 'js', 'javascript', 'python', 'py', 'css', 'json', 'sql'].includes(lang.toLowerCase());
+
+      if (isArtifactable) {
+        return (
+          <div key={i} className="artifact-code-block" style={{
+            margin: '16px 0',
+            border: '1px solid #1e293b',
+            borderRadius: '8px',
+            backgroundColor: '#070a13',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 16px',
+              backgroundColor: '#0d1324',
+              borderBottom: '1px solid #1e293b',
+              fontSize: '0.8rem',
+              color: '#94a3b8'
+            }}>
+              <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {lang.toLowerCase() === 'html' ? '🌐 HTML Preview' : lang.toLowerCase() === 'csv' ? '📊 CSV Dataset' : lang.toLowerCase() === 'svg' ? '🎨 SVG Design' : `📄 ${lang.toUpperCase()} Script`}
+              </span>
+              {onSelectArtifact && (
+                <button
+                  onClick={() => onSelectArtifact({
+                    type: ['html', 'svg', 'csv'].includes(lang.toLowerCase()) ? lang.toLowerCase() : 'code',
+                    content: code.trim(),
+                    name: `artifact.${lang === 'js' || lang === 'javascript' ? 'jsx' : lang === 'py' || lang === 'python' ? 'py' : lang}`,
+                    title: `Interactive ${lang.toUpperCase()} Output`
+                  })}
+                  style={{
+                    backgroundColor: '#0284c7',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '4px 10px',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    transition: 'all 0.2s',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                  }}
+                  onMouseOver={(e) => e.target.style.backgroundColor = '#0369a1'}
+                  onMouseOut={(e) => e.target.style.backgroundColor = '#0284c7'}
+                >
+                  🖥️ Open Artifact
+                </button>
+              )}
+            </div>
+            <pre style={{ margin: 0, padding: '12px', overflowX: 'auto', backgroundColor: '#070a13' }}><code style={{ color: '#38bdf8' }}>{code.trim()}</code></pre>
+          </div>
+        );
       }
 
       return <pre key={i}><code>{code.trim()}</code></pre>;
@@ -581,7 +638,7 @@ function InteractiveChart({ spec }) {
   );
 }
 
-export default function ChatMessage({ role, content, timestamp, sessionToken }) {
+export default function ChatMessage({ role, content, timestamp, sessionToken, onSelectArtifact }) {
   const isUser = role === 'user';
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -632,7 +689,7 @@ export default function ChatMessage({ role, content, timestamp, sessionToken }) 
       </div>
       <div>
         <div className="message-content" style={{ position: 'relative', paddingRight: !isUser ? '40px' : undefined }}>
-          {parseMarkdown(content, sessionToken)}
+          {parseMarkdown(content, sessionToken, onSelectArtifact)}
 
           {!isUser && (
             <button

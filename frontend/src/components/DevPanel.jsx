@@ -19,6 +19,14 @@ export default function DevPanel({ sessionToken, userId, onClose }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Terminal Console State
+  const [terminalInput, setTerminalInput] = useState('');
+  const [terminalLogs, setTerminalLogs] = useState([
+    { type: 'info', text: 'Welcome to JARVIS Sandbox Terminal Console.' },
+    { type: 'info', text: 'Type any shell command to execute inside your sandboxed container environment.' }
+  ]);
+  const [executing, setExecuting] = useState(false);
+
   // Fetch all necessary data
   const fetchData = async () => {
     if (!sessionToken) return;
@@ -103,6 +111,53 @@ export default function DevPanel({ sessionToken, userId, onClose }) {
       }
     } catch (err) {
       setErrorMsg(err.message);
+    }
+  };
+
+  // Handle Terminal submission to backend terminal endpoint
+  const handleTerminalSubmit = async (e) => {
+    e.preventDefault();
+    if (!terminalInput.trim() || executing) return;
+
+    const cmd = terminalInput.trim();
+    setTerminalInput('');
+    setTerminalLogs(prev => [...prev, { type: 'input', text: `$ ${cmd}` }]);
+    setExecuting(true);
+
+    try {
+      const res = await fetch('/api/terminal/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
+        body: JSON.stringify({ command: cmd })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const logs = [];
+        if (data.stdout) {
+          logs.push({ type: 'stdout', text: data.stdout });
+        }
+        if (data.stderr) {
+          logs.push({ type: 'stderr', text: data.stderr });
+        }
+        if (data.error) {
+          logs.push({ type: 'error', text: data.error });
+        }
+        if (!data.stdout && !data.stderr && !data.error) {
+          logs.push({ type: 'info', text: `Command completed with exit code: ${data.exit_code}` });
+        }
+        setTerminalLogs(prev => [...prev, ...logs]);
+      } else {
+        const err = await res.json().catch(() => null);
+        setTerminalLogs(prev => [...prev, { type: 'error', text: `Error: ${err?.detail || 'Failed to run command'}` }]);
+      }
+    } catch (err) {
+      setTerminalLogs(prev => [...prev, { type: 'error', text: `Connection error: ${err.message}` }]);
+    } finally {
+      setExecuting(false);
     }
   };
 
@@ -439,6 +494,12 @@ export default function DevPanel({ sessionToken, userId, onClose }) {
           >
             Webhook Integration
           </button>
+          <button
+            className={`nav-tab ${activeTab === 'terminal' ? 'active' : ''}`}
+            onClick={() => setActiveTab('terminal')}
+          >
+            💻 Sandbox Terminal
+          </button>
         </div>
 
         <div className="dev-body">
@@ -446,7 +507,7 @@ export default function DevPanel({ sessionToken, userId, onClose }) {
           
           {isLoading && <div style={{ color: '#00d4ff', fontSize: '0.9rem' }}>Reloading console...</div>}
 
-          {activeTab === 'analytics' ? (
+          {activeTab === 'analytics' && (
             <>
               <div className="analytics-grid">
                 <div className="metric-card">
@@ -531,7 +592,9 @@ export default function DevPanel({ sessionToken, userId, onClose }) {
                 </div>
               </div>
             </>
-          ) : (
+          )}
+
+          {activeTab === 'webhooks' && (
             <>
               <div>
                 <h4 className="section-title">Configure Outgoing Webhooks</h4>
@@ -646,6 +709,62 @@ export default function DevPanel({ sessionToken, userId, onClose }) {
                 </div>
               </div>
             </>
+          )}
+          {activeTab === 'terminal' && (
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', minHeight: '350px' }}>
+              <h4 className="section-title">Isolated Container Sandbox Shell</h4>
+              <div style={{
+                flex: 1,
+                backgroundColor: '#05070f',
+                border: '1px solid #1e293b',
+                borderRadius: '12px',
+                padding: '16px',
+                fontFamily: 'Consolas, Monaco, Courier New, monospace',
+                fontSize: '0.85rem',
+                color: '#4ade80',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                maxHeight: '400px',
+                minHeight: '250px'
+              }}>
+                {terminalLogs.map((log, idx) => (
+                  <div key={idx} style={{
+                    whiteSpace: 'pre-wrap',
+                    color: log.type === 'input' ? '#38bdf8' : log.type === 'stderr' || log.type === 'error' ? '#ef4444' : log.type === 'info' ? '#94a3b8' : '#4ade80'
+                  }}>
+                    {log.text}
+                  </div>
+                ))}
+                {executing && (
+                  <div style={{ color: '#e2e8f0' }}>Running command...</div>
+                )}
+              </div>
+              
+              <form onSubmit={handleTerminalSubmit} style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Type shell command (e.g. pip list, python --version, ls -la)..."
+                  value={terminalInput}
+                  onChange={(e) => setTerminalInput(e.target.value)}
+                  disabled={executing}
+                  style={{ fontFamily: 'monospace' }}
+                />
+                <button type="submit" className="add-btn" disabled={executing} style={{ height: '38px', minWidth: '80px' }}>
+                  {executing ? '...' : 'Run'}
+                </button>
+                <button
+                  type="button"
+                  className="webhook-del-btn"
+                  onClick={() => setTerminalLogs([{ type: 'info', text: 'Console cleared.' }])}
+                  style={{ height: '38px' }}
+                >
+                  Clear
+                </button>
+              </form>
+            </div>
           )}
         </div>
       </div>

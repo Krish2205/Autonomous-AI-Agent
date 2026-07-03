@@ -12,6 +12,9 @@ import { supabase } from './supabaseClient';
 import DevPanel from './components/DevPanel';
 import AgentBuilderPanel from './components/AgentBuilderPanel';
 import WorkspaceExplorer from './components/WorkspaceExplorer';
+import IntegrationsModal from './components/IntegrationsModal';
+import TeacherStudioDashboard from './components/TeacherStudioDashboard';
+import ArtifactsPanel from './components/ArtifactsPanel';
 
 // ── Helpers ────────────────────────────────────────────────────────
 function generateId() {
@@ -26,6 +29,66 @@ function truncateTitle(text, maxLen = 40) {
 function formatTime(date) {
   return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
+
+const PROFILE_MAP = {
+  edtech_studio: {
+    name: 'Bharat Adaptive Learning Studio',
+    emoji: '🇮🇳',
+    title: 'Welcome to Bharat Adaptive Learning Studio',
+    subtitle: 'Your autonomous AI teaching workstation. Automate NCERT lesson planning, CBSE test papers, WhatsApp broadcasts, and 1-on-1 Hinglish student tutoring.',
+    chips: [
+      "📑 Draft NCERT Lesson Plan for Class 10 Chemistry",
+      "📝 Generate CBSE Unit Test with Assertion-Reason Questions",
+      "📲 Format WhatsApp Parents Notice for PTM Schedule",
+      "📊 Export Student Attendance & Marksheet to Google Sheets"
+    ]
+  },
+  developer: {
+    name: 'Developer Suite',
+    emoji: '💻',
+    title: 'Welcome to Developer Suite Workstation',
+    subtitle: 'Your full-stack autonomous software engineering workstation. Run sandboxed python code, debug terminal logs, and automate DevOps.',
+    chips: [
+      "💻 Write a Python script to process CSV data",
+      "🔍 Search for the latest React documentation",
+      "⚙️ Run terminal diagnostic checks on local server",
+      "📊 Analyze database schema performance"
+    ]
+  },
+  cloud_devops: {
+    name: 'Cloud & DevOps SRE',
+    emoji: '☁️',
+    title: 'Welcome to Cloud & DevOps SRE Hub',
+    subtitle: 'Your autonomous SRE operations center. Validate Terraform IaC stacks, monitor Kubernetes clusters, and audit CI/CD pipelines.',
+    chips: [
+      "☁️ Validate Terraform AWS deployment stack",
+      "⚙️ Check Kubernetes pod status and memory logs",
+      "🔀 Audit GitHub Actions workflow pipeline"
+    ]
+  },
+  creative_marketer: {
+    name: 'Growth Marketing',
+    emoji: '🚀',
+    title: 'Welcome to Growth Marketing Studio',
+    subtitle: 'Your autonomous growth marketing agency. Draft viral ad copy hooks, generate high-converting email campaigns, and analyze CAC/ROAS.',
+    chips: [
+      "🚀 Draft 3 high-converting Meta ad copy hooks",
+      "📣 Create outbound cold email sales sequence",
+      "📊 Analyze customer acquisition cost and ROAS"
+    ]
+  },
+  financial_analyst: {
+    name: 'Financial Analyst',
+    emoji: '📈',
+    title: 'Welcome to Financial Analyst Hub',
+    subtitle: 'Your Wall Street equity research workstation. Extract fundamental stock tickers, parse P&L statements, and build financial charts.',
+    chips: [
+      "📈 Analyze AAPL stock fundamentals and P/E ratio",
+      "📑 Draft executive summary of Q3 revenue report",
+      "📊 Plot historical cryptocurrency price trends"
+    ]
+  }
+};
 
 // ── Main App ───────────────────────────────────────────────────────
 export default function App() {
@@ -46,8 +109,19 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('chats'); // 'chats', 'search', 'images', 'videos', 'library'
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   const [isBuilderPanelOpen, setIsBuilderPanelOpen] = useState(false);
+  const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [pendingBuilder, setPendingBuilder] = useState(null);
+  const [activeArtifact, setActiveArtifact] = useState(null);
+
+  const activeProfile = PROFILE_MAP[user?.id] || { 
+    id: user?.id, 
+    name: user?.user_metadata?.full_name || user?.id || 'Workspace', 
+    emoji: '📂', 
+    title: `Welcome to ${user?.user_metadata?.full_name || user?.id || 'Workspace'}`, 
+    subtitle: "Your autonomous AI workspace. Ask me anything — I'll orchestrate specialized agents to execute your requests.", 
+    chips: ["🔍 Search the web", "📊 Analyze documents", "💻 Write code"] 
+  };
 
   const handleToast = useCallback((toast) => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -62,7 +136,7 @@ export default function App() {
 
   const messagesEndRef = useRef(null);
 
-  // Restore session from localStorage on mount
+  // Restore session from localStorage on mount & handle OAuth callbacks
   useEffect(() => {
     const savedUser = localStorage.getItem('jarvis_user');
     const savedToken = localStorage.getItem('jarvis_token');
@@ -70,7 +144,17 @@ export default function App() {
       setUser(JSON.parse(savedUser));
       setSessionToken(savedToken);
     }
-  }, []);
+
+    // Check for Google OAuth Callback URL parameters
+    const params = new URLSearchParams(window.location.search);
+    const provider = params.get('connected_provider');
+    const email = params.get('email');
+    if (provider && email) {
+      handleToast({ level: 'success', title: 'Google Workspace OAuth Verified!', message: `Authenticated and synced with ${email}.` });
+      setIsIntegrationsOpen(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [handleToast]);
 
   // Listen to Supabase auth state changes if active
   useEffect(() => {
@@ -91,7 +175,9 @@ export default function App() {
   useEffect(() => {
     setHasLoaded(false);
     if (user) {
-      const savedConvs = localStorage.getItem(`jarvis_conversations_${user.id}`);
+      const isLocal = user.email && user.email.endsWith('@local.jarvis');
+      const storageKey = isLocal ? 'jarvis_conversations_local' : `jarvis_conversations_${user.id}`;
+      const savedConvs = localStorage.getItem(storageKey);
       if (savedConvs) {
         try {
           setConversations(JSON.parse(savedConvs));
@@ -112,6 +198,8 @@ export default function App() {
   useEffect(() => {
     if (!user || !hasLoaded) return;
 
+    const isLocal = user.email && user.email.endsWith('@local.jarvis');
+    const storageKey = isLocal ? 'jarvis_conversations_local' : `jarvis_conversations_${user.id}`;
     if (conversations.length > 0) {
       const metadata = conversations.map(c => ({
         id: c.id,
@@ -120,9 +208,9 @@ export default function App() {
         createdAt: c.createdAt,
         messages: [] // Empty messages to fetch dynamically on load/click
       }));
-      localStorage.setItem(`jarvis_conversations_${user.id}`, JSON.stringify(metadata));
+      localStorage.setItem(storageKey, JSON.stringify(metadata));
     } else {
-      localStorage.removeItem(`jarvis_conversations_${user.id}`);
+      localStorage.removeItem(storageKey);
     }
   }, [conversations, user, hasLoaded]);
 
@@ -452,14 +540,18 @@ export default function App() {
   };
 
   // ── Upload file ──────────────────────────────────────────────
-  const handleUpload = useCallback(async (file) => {
+  const handleUpload = useCallback(async (file, preventRedirect = false) => {
     if (!sessionToken) return;
     setIsUploading(true);
     let convId = activeConversationId;
 
     if (!convId) {
-      convId = createNewChat();
-      await new Promise(resolve => setTimeout(resolve, 0));
+      if (preventRedirect) {
+        convId = "temp_upload";
+      } else {
+        convId = createNewChat();
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
     }
 
     const formData = new FormData();
@@ -482,38 +574,47 @@ export default function App() {
       const data = await response.json();
       window.reloadWorkspaceFiles?.();
 
-      const systemMessage = {
-        id: generateId(),
-        role: 'jarvis',
-        content: `📁 **File Uploaded Successfully:** \`${data.filename}\` has been parsed and indexed. You can now ask questions about its content!`,
-        timestamp: new Date().toISOString(),
-      };
+      if (convId !== "temp_upload") {
+        const systemMessage = {
+          id: generateId(),
+          role: 'jarvis',
+          content: `📁 **File Uploaded Successfully:** \`${data.filename}\` has been parsed and indexed. You can now ask questions about its content!`,
+          timestamp: new Date().toISOString(),
+        };
 
-      setConversations(prev => prev.map(c => {
-        if (c.id === convId) {
-          return { ...c, messages: [...c.messages, systemMessage] };
-        }
-        return c;
-      }));
+        setConversations(prev => prev.map(c => {
+          if (c.id === convId) {
+            return { ...c, messages: [...c.messages, systemMessage] };
+          }
+          return c;
+        }));
+      } else {
+        handleToast({ title: "File Uploaded", message: `"${data.filename}" uploaded and indexed successfully.`, level: "success" });
+      }
 
     } catch (error) {
-      const errorMessage = {
-        id: generateId(),
-        role: 'jarvis',
-        content: `❌ **Upload Error:** ${error.message}`,
-        timestamp: new Date().toISOString(),
-      };
+      console.error(error);
+      if (convId !== "temp_upload") {
+        const errorMessage = {
+          id: generateId(),
+          role: 'jarvis',
+          content: `❌ **Upload Error:** ${error.message}`,
+          timestamp: new Date().toISOString(),
+        };
 
-      setConversations(prev => prev.map(c => {
-        if (c.id === convId) {
-          return { ...c, messages: [...c.messages, errorMessage] };
-        }
-        return c;
-      }));
+        setConversations(prev => prev.map(c => {
+          if (c.id === convId) {
+            return { ...c, messages: [...c.messages, errorMessage] };
+          }
+          return c;
+        }));
+      } else {
+        handleToast({ title: "Upload Error", message: error.message, level: "error" });
+      }
     } finally {
       setIsUploading(false);
     }
-  }, [activeConversationId, createNewChat, sessionToken]);
+  }, [activeConversationId, createNewChat, sessionToken, handleToast]);
 
   // ── Delete conversation ──────────────────────────────────────
   const handleDeleteConversation = useCallback(async (id) => {
@@ -576,7 +677,7 @@ export default function App() {
 
       {/* Floating Toast Notification Container */}
       <div className="toast-container">
-        {toasts.map(toast => (
+        {toasts?.map(toast => (
           <div key={toast.id} className={`toast-card ${toast.level}`}>
             <div className="toast-header">
               <span className="toast-icon">
@@ -614,6 +715,10 @@ export default function App() {
           setActiveTab={setActiveTab}
           onToggleDevPanel={() => setIsDevPanelOpen(true)}
           onToggleBuilderPanel={() => setIsBuilderPanelOpen(true)}
+          onGoHome={() => {
+            setActiveConversationId(null);
+            setActiveTab('chats');
+          }}
         />
 
         <div className="main-area">
@@ -628,79 +733,96 @@ export default function App() {
             onDeleteActiveWorkspace={handleDeleteActiveWorkspace}
             onToggleDevPanel={() => setIsDevPanelOpen(true)}
             onToggleBuilderPanel={() => setIsBuilderPanelOpen(true)}
+            activeProfile={activeProfile}
+            onToggleIntegrations={() => setIsIntegrationsOpen(true)}
           />
 
-          <div className="chat-area" style={{ 
-            padding: (activeTab === 'images' || activeTab === 'videos' || activeTab === 'library' || activeTab === 'agents') ? '24px' : undefined,
-            overflowY: (activeTab === 'images' || activeTab === 'videos' || activeTab === 'library' || activeTab === 'agents') ? 'auto' : undefined
-          }}>
-            {(activeTab === 'chats' || activeTab === 'search') && (
-              <>
-                {showWelcome ? (
-                  <div className="welcome-container">
-                    <div className="welcome-icon">🤖</div>
-                    <h1 className="welcome-title">Welcome to JARVIS</h1>
-                    <p className="welcome-subtitle">
-                      Your autonomous AI operating system. Ask me anything — I'll orchestrate
-                      specialized agents to search the web, analyze documents, write code,
-                      manage emails, and more.
-                    </p>
-                    <div className="prompt-chips">
-                      {[
-                        "🔍 Search for the latest AI breakthroughs",
-                        "📊 Analyze my uploaded documents",
-                        "💻 Write a Python web scraper",
-                        "📝 Summarize a research topic",
-                        "📧 Check my email inbox",
-                      ].map((prompt, i) => (
-                        <button
-                          key={i}
-                          className="prompt-chip"
-                          onClick={() => handleSend(prompt.replace(/^[^\s]+\s/, ''))}
-                          disabled={isLoading}
-                        >
-                          {prompt}
-                        </button>
-                      ))}
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden', width: '100%' }}>
+            <div className="chat-area" style={{ 
+              flex: activeArtifact ? '0 0 50%' : '1',
+              padding: (activeTab === 'images' || activeTab === 'videos' || activeTab === 'library' || activeTab === 'agents') ? '24px' : undefined,
+              overflowY: (activeTab === 'images' || activeTab === 'videos' || activeTab === 'library' || activeTab === 'agents') ? 'auto' : undefined,
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              {(activeTab === 'chats' || activeTab === 'search') && (
+                <>
+                  {(!activeConversationId && (user?.id === 'edtech_studio' || activeProfile?.id === 'edtech_studio')) ? (
+                    <TeacherStudioDashboard
+                      onSend={handleSend}
+                      isLoading={isLoading}
+                      onUpload={handleUpload}
+                      isUploading={isUploading}
+                    />
+                  ) : showWelcome ? (
+                    <div className="welcome-container">
+                      <div className="welcome-icon">{activeProfile?.emoji || '🤖'}</div>
+                      <h1 className="welcome-title">{activeProfile?.title || 'Welcome to JARVIS'}</h1>
+                      <p className="welcome-subtitle">
+                        {activeProfile?.subtitle || "Your autonomous AI operating system. Ask me anything — I'll orchestrate specialized agents to execute your requests."}
+                      </p>
+                      <div className="prompt-chips">
+                        {(activeProfile?.chips || [
+                          "🔍 Search for the latest AI breakthroughs",
+                          "📊 Analyze my uploaded documents",
+                          "💻 Write a Python web scraper",
+                          "📝 Summarize a research topic"
+                        ]).map((prompt, i) => (
+                          <button
+                            key={i}
+                            className="prompt-chip"
+                            onClick={() => handleSend(prompt.replace(/^[^\s]+\s/, ''))}
+                            disabled={isLoading}
+                          >
+                            {prompt}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="chat-messages" id="chat-messages">
-                    {messages.map((msg, idx) => (
-                      <ChatMessage
-                        key={msg.id || `msg-${idx}`}
-                        role={msg.role === 'assistant' ? 'jarvis' : msg.role}
-                        content={msg.content}
-                        timestamp={msg.timestamp}
-                        sessionToken={sessionToken}
-                      />
-                    ))}
-                    {isLoading && <TypingIndicator currentStep={currentStep} />}
-                    <div ref={messagesEndRef} />
-                  </div>
-                )}
+                  ) : (
+                    <div className="chat-messages" id="chat-messages">
+                      {messages.map((msg, idx) => (
+                        <ChatMessage
+                          key={msg.id || `msg-${idx}`}
+                          role={msg.role === 'assistant' ? 'jarvis' : msg.role}
+                          content={msg.content}
+                          timestamp={msg.timestamp}
+                          sessionToken={sessionToken}
+                          onSelectArtifact={setActiveArtifact}
+                        />
+                      ))}
+                      {isLoading && <TypingIndicator currentStep={currentStep} />}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  )}
 
-                <ChatInput
-                  onSend={handleSend}
-                  onUpload={handleUpload}
-                  isLoading={isLoading}
-                  isUploading={isUploading}
-                  showSuggestions={false}
-                />
-              </>
-            )}
+                  {!((user?.id === 'edtech_studio' || activeProfile?.id === 'edtech_studio') && !activeConversationId) && (
+                    <ChatInput
+                      onSend={handleSend}
+                      onUpload={handleUpload}
+                      isLoading={isLoading}
+                      isUploading={isUploading}
+                      showSuggestions={false}
+                    />
+                  )}
+                </>
+              )}
 
-            {activeTab === 'images' && (
-              <WorkspaceExplorer sessionToken={sessionToken} onToast={handleToast} filterType="image" />
-            )}
-            {activeTab === 'videos' && (
-              <WorkspaceExplorer sessionToken={sessionToken} onToast={handleToast} filterType="video" />
-            )}
-            {activeTab === 'library' && (
-              <WorkspaceExplorer sessionToken={sessionToken} onToast={handleToast} filterType="all" />
-            )}
-            {activeTab === 'agents' && (
-              <AgentsGrid activeAgents={activeAgents} sessionToken={sessionToken} onToast={handleToast} />
+              {activeTab === 'images' && (
+                <WorkspaceExplorer sessionToken={sessionToken} onToast={handleToast} filterType="image" />
+              )}
+              {activeTab === 'videos' && (
+                <WorkspaceExplorer sessionToken={sessionToken} onToast={handleToast} filterType="video" />
+              )}
+              {activeTab === 'library' && (
+                <WorkspaceExplorer sessionToken={sessionToken} onToast={handleToast} filterType="all" />
+              )}
+              {activeTab === 'agents' && (
+                <AgentsGrid activeAgents={activeAgents} sessionToken={sessionToken} onToast={handleToast} />
+              )}
+            </div>
+            {activeArtifact && (
+              <ArtifactsPanel artifact={activeArtifact} onClose={() => setActiveArtifact(null)} />
             )}
           </div>
         </div>
@@ -792,6 +914,12 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <IntegrationsModal 
+        isOpen={isIntegrationsOpen} 
+        onClose={() => setIsIntegrationsOpen(false)} 
+        onToast={handleToast} 
+      />
     </>
   );
 }

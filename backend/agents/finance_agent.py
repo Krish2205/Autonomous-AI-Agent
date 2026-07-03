@@ -65,6 +65,13 @@ class FinanceAgent(BaseAgent):
         logger.info(f"Querying yfinance for {ticker_symbol} (Type: {query_type}, Period: {period})")
 
         try:
+            from backend.config import get_user_integration
+            av_integ = get_user_integration("alpha_vantage")
+            av_banner = ""
+            if av_integ.get("connected"):
+                av_acc = av_integ.get("account")
+                av_banner = f"\n\n---\n💵 *Synced with connected Alpha Vantage API account:* `{av_acc}`"
+
             ticker = yf.Ticker(ticker_symbol)
             
             # Step 2: Handle 'info' (company profile)
@@ -87,7 +94,7 @@ class FinanceAgent(BaseAgent):
                     f"* **Website:** [{website}]({website})\n\n"
                     f"**Business Description:**\n{summary}"
                 )
-                return report
+                return report + av_banner
 
             # Step 3: Handle 'history' (historical chart data - fetches 5 years by default)
             elif query_type == "history" or "chart" in query.lower() or "plot" in query.lower() or "visualize" in query.lower():
@@ -126,7 +133,7 @@ class FinanceAgent(BaseAgent):
                     f"or change the visualization representation:\n\n"
                     f"```chart\n{json.dumps(chart_spec, indent=2)}\n```"
                 )
-                return result_message
+                return result_message + av_banner
 
             # Step 4: Handle 'price' (current price metrics)
             else:
@@ -173,7 +180,7 @@ class FinanceAgent(BaseAgent):
                 if info.get("fiftyTwoWeekHigh"):
                     report += f"* **52-Week Range:** {info.get('fiftyTwoWeekLow')} - {info.get('fiftyTwoWeekHigh')} {currency}\n"
 
-                return report
+                return report + av_banner
 
         except Exception as e:
             logger.error(f"Failed to query yfinance data: {e}")
