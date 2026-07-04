@@ -547,6 +547,244 @@ def query(request: QueryRequest, current_user: str = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/query/stream")
+async def query_stream(request: QueryRequest, current_user: str = Depends(get_current_user)):
+    """
+    Streaming SSE endpoint for real-time query responses.
+    Emits a structured sequence of server-sent events:
+      - {"type": "step_start",   "step": N, "agent": "...", "thought": "..."}
+      - {"type": "agent_result", "step": N, "agent": "...", "result": "..."}
+      - {"type": "synthesis_chunk", "chunk": "..."}   (one per LLM token)
+      - {"type": "done",  "agents_used": [...]}
+      - {"type": "error", "detail": "..."}
+    """
+    if not request.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+
+    logger.info(f"SSE stream query (user: {current_user}, session: {request.session_id}): {request.query[:80]}...")
+
+    import threading
+    import queue as queue_module
+    from backend.config import load_enabled_agents
+    from backend.core.memory import ConversationMemory
+    from backend.core.analytics import current_session_id, current_query_id, current_step_name
+    from backend.core.planner import Planner
+    from backend.core.synthesizer import Synthesizer
+    from backend.core.registry import AgentRegistry
+    import yaml, os, contextvars
+
+    event_queue: queue_module.Queue = queue_module.Queue()
+    _SENTINEL = object()
+
+    def run_streaming_pipeline():
+        """Run the full orchestration pipeline in a thread, pushing events to the queue."""
+        try:
+            # Propagate context vars into thread
+            current_user_id.set(current_user)
+            current_session_id.set(request.session_id)
+            current_query_id.set(request.query)
+
+            from backend.config import load_enabled_agents
+            memory = ConversationMemory(request.session_id)
+            chat_history = memory.get_context_string()
+
+            planner = Planner()
+            user_id = current_user
+            enabled_agents = load_enabled_agents(user_id)
+            valid_targets = [n for n in orchestrator.registry.get_target_names() if n in enabled_agents]
+
+            descriptions_lines = []
+            for name in valid_targets:
+                agent = orchestrator.registry.get(name)
+                if agent:
+                    descriptions_lines.append(f"- '{name}': {agent.description}")
+            agent_descriptions = "\n".join(descriptions_lines)
+
+            steps_taken = []
+            agents_used = set()
+            max_steps = 5
+
+            # Load workspace rules safely
+            try:
+                from backend.core.orchestrator import load_workspace_rules
+                workspace_rules = load_workspace_rules()
+            except Exception:
+                workspace_rules = ""
+
+            for step_num in range(1, max_steps + 1):
+                scratchpad_lines = []
+                for s in steps_taken:
+                    scratchpad_lines.append(
+                        f"Step {s['step']}:\n- Thought: {s['thought']}\n"
+                        f"- Action: Called agent '{s['agent']}' with query '{s['query']}'\n"
+                        f"- Result: {s['result'][:300]}...\n"
+                    )
+                scratchpad = "\n".join(scratchpad_lines) if scratchpad_lines else "No steps taken yet."
+
+                plan_step = planner.plan(
+                    query=request.query,
+                    agent_descriptions=agent_descriptions,
+                    valid_targets=valid_targets,
+                    chat_history=chat_history,
+                    scratchpad=scratchpad,
+                    workspace_rules=workspace_rules,
+                )
+
+                if plan_step.action == "finish":
+                    break
+
+                agent_name = plan_step.target
+                agent_query = plan_step.query
+
+                if not agent_name or not agent_query:
+                    break
+
+                # Handle builder confirmation (same as non-streaming)
+                if agent_name == "agent_builder" and request.confirm_build is None:
+                    event_queue.put({
+                        "type": "needs_confirmation",
+                        "message": f"I need to create a new custom agent: **{agent_query}**. Confirm to proceed.",
+                        "pending_builder_query": agent_query,
+                    })
+                    event_queue.put(_SENTINEL)
+                    return
+
+                # Emit step start event
+                event_queue.put({
+                    "type": "step_start",
+                    "step": step_num,
+                    "agent": agent_name,
+                    "thought": plan_step.thought,
+                })
+
+                agents_used.add(agent_name)
+                current_step_name.set(f"agent:{agent_name}")
+
+                result = orchestrator._execute_task(agent_name, agent_query, chat_history=chat_history)
+
+                # Emit agent result event
+                event_queue.put({
+                    "type": "agent_result",
+                    "step": step_num,
+                    "agent": agent_name,
+                    "result": result,
+                })
+
+                steps_taken.append({
+                    "step": step_num,
+                    "thought": plan_step.thought,
+                    "agent": agent_name,
+                    "query": agent_query,
+                    "result": result,
+                })
+
+            # Check for direct sheet/doc output
+            sheets_or_doc_step = next(
+                (s for s in steps_taken if any(k in s["result"] for k in ["Click Here to Download", "google_sheets_url", "google_docs_url"])),
+                None
+            )
+
+            if sheets_or_doc_step:
+                # Emit the direct result as one synthesis_chunk + done
+                event_queue.put({"type": "synthesis_chunk", "chunk": sheets_or_doc_step["result"]})
+                event_queue.put({"type": "done", "agents_used": list(agents_used)})
+                memory.add_message("user", request.query)
+                memory.add_message("assistant", sheets_or_doc_step["result"])
+                event_queue.put(_SENTINEL)
+                return
+
+            # Synthesize with streaming
+            if steps_taken:
+                combined_results = "\n\n".join(
+                    f"--- Step {s['step']}: Agent '{s['agent']}' ---\nQuery: {s['query']}\nResult:\n{s['result']}"
+                    for s in steps_taken
+                )
+            else:
+                combined_results = "No action steps were required."
+
+            current_step_name.set("synthesizer")
+
+            # Stream the synthesizer response token by token
+            from backend.config import llm
+            from langchain_core.prompts import ChatPromptTemplate
+            from langchain_core.output_parsers import StrOutputParser
+
+            synth_prompt = ChatPromptTemplate.from_messages([
+                ("system",
+                    "You are the Super Manager. Combine agent findings into a single, professional, cohesive final response for the user. "
+                    "Do not mention internal agents by name. Present the answer naturally. "
+                    "If code was generated, include it in markdown. "
+                    "STRICT ACCURACY RULE:\n"
+                    "1. Answer ONLY what the user requested.\n"
+                    "2. PRESERVE PDF DOWNLOAD LINKS & MEDIA LINKS EXACTLY.\n"
+                    "3. PRESERVE EXHAUSTIVE CONTENT without summarizing.\n\n"
+                    "Conversation History:\n{chat_history}"
+                ),
+                ("human", "Original Query: {query}\n\nAgent Results:\n{agent_results}"),
+            ])
+
+            full_response_parts = []
+            try:
+                stream = (synth_prompt | llm).stream({
+                    "query": request.query,
+                    "agent_results": combined_results,
+                    "chat_history": chat_history,
+                })
+                for chunk in stream:
+                    token = chunk.content if hasattr(chunk, "content") else str(chunk)
+                    if token:
+                        full_response_parts.append(token)
+                        event_queue.put({"type": "synthesis_chunk", "chunk": token})
+            except Exception as e:
+                logger.error(f"Streaming synthesis failed: {e}")
+                event_queue.put({"type": "error", "detail": f"Synthesis failed: {str(e)}"})
+                event_queue.put(_SENTINEL)
+                return
+
+            full_response = "".join(full_response_parts)
+
+            # Save to memory
+            memory.add_message("user", request.query)
+            memory.add_message("assistant", full_response)
+
+            event_queue.put({"type": "done", "agents_used": list(agents_used)})
+
+        except Exception as e:
+            logger.error(f"Streaming pipeline error: {e}")
+            event_queue.put({"type": "error", "detail": str(e)})
+        finally:
+            event_queue.put(_SENTINEL)
+
+    # Start pipeline in background thread
+    thread = threading.Thread(target=run_streaming_pipeline, daemon=True)
+    thread.start()
+
+    async def event_generator():
+        loop = asyncio.get_event_loop()
+        while True:
+            # Poll queue in a non-blocking async-friendly way
+            try:
+                event = await loop.run_in_executor(None, lambda: event_queue.get(timeout=120))
+            except Exception:
+                yield f"data: {json.dumps({'type': 'error', 'detail': 'Stream timed out'})}\n\n"
+                break
+            if event is _SENTINEL:
+                yield f"data: {json.dumps({'type': 'stream_end'})}\n\n"
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+
+
+
 @app.get("/api/session/{session_id}/history")
 def get_session_history(session_id: str, current_user: str = Depends(get_current_user)):
     """Get the conversation history for a given session under user context."""

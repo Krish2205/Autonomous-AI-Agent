@@ -1,0 +1,1764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JARVIS — System Architecture Diagrams</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        background: '#0d1117',
+        primaryColor: '#1e293b',
+        primaryTextColor: '#e2e8f0',
+        primaryBorderColor: '#334155',
+        lineColor: '#00d4ff',
+        secondaryColor: '#0f172a',
+        tertiaryColor: '#1e293b',
+        edgeLabelBackground: '#0d1117',
+        clusterBkg: '#111827',
+        clusterBorder: '#334155',
+        titleColor: '#00d4ff',
+        nodeTextColor: '#e2e8f0',
+        mainBkg: '#1e293b',
+        nodeBorder: '#475569',
+        fontSize: '14px'
+      },
+      flowchart: { curve: 'basis', padding: 20 },
+      sequence: { mirrorActors: false, messageAlign: 'center' },
+      securityLevel: 'loose'
+    });
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cyan:    #00d4ff;
+      --violet:  #7c3aed;
+      --emerald: #10b981;
+      --amber:   #f59e0b;
+      --rose:    #f43f5e;
+      --sky:     #38bdf8;
+      --bg:      #060a14;
+      --surface: #0d1524;
+      --card:    #111a2e;
+      --border:  rgba(0, 212, 255, 0.12);
+      --text:    #e2e8f0;
+      --muted:   #64748b;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated grid background ────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────── */
+    .hero {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 72px 24px 48px;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,212,255,0.08) 0%, transparent 70%);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0,212,255,0.08);
+      border: 1px solid rgba(0,212,255,0.2);
+      border-radius: 100px;
+      padding: 6px 16px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--cyan);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+
+    .hero-badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      background: var(--cyan);
+      border-radius: 50%;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(1.4); }
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800;
+      background: linear-gradient(135deg, #ffffff 0%, var(--cyan) 50%, var(--violet) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+
+    .hero p {
+      font-size: 1.05rem;
+      color: var(--muted);
+      max-width: 680px;
+      margin: 0 auto 32px;
+      line-height: 1.7;
+    }
+
+    /* ── Stat pills ──────────────────────────────────────────────── */
+    .stats {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 100px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: #cbd5e1;
+    }
+
+    .stat .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+    }
+
+    /* ── Nav ─────────────────────────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      flex-wrap: wrap;
+      padding: 12px 24px;
+      background: rgba(6,10,20,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-btn {
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .nav-btn:hover {
+      color: var(--cyan);
+      background: rgba(0,212,255,0.06);
+      border-color: rgba(0,212,255,0.15);
+    }
+
+    .nav-btn.active {
+      color: var(--cyan);
+      background: rgba(0,212,255,0.1);
+      border-color: rgba(0,212,255,0.3);
+    }
+
+    /* ── Main content ─────────────────────────────────────────────── */
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 56px 24px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 56px;
+    }
+
+    /* ── Diagram section ─────────────────────────────────────────── */
+    .diagram-section {
+      scroll-margin-top: 80px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .section-num {
+      flex-shrink: 0;
+      width: 40px; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 10px;
+      background: rgba(0,212,255,0.1);
+      border: 1px solid rgba(0,212,255,0.25);
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--cyan);
+    }
+
+    .section-meta h2 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 4px;
+    }
+
+    .section-meta p {
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .diagram-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: box-shadow 0.3s;
+    }
+
+    .diagram-card:hover {
+      box-shadow: 0 0 40px rgba(0,212,255,0.06);
+    }
+
+    .diagram-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0,0,0,0.2);
+    }
+
+    .dot-group { display: flex; gap: 6px; }
+    .dot-group span {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+    }
+
+    .diagram-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .diagram-body {
+      padding: 32px 24px;
+      overflow-x: auto;
+    }
+
+    /* ── Info cards grid ──────────────────────────────────────────── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .info-card {
+      padding: 18px 20px;
+      background: rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+    }
+
+    .info-card h4 {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--cyan);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .info-card p, .info-card li {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    .info-card ul { padding-left: 14px; }
+
+    /* ── Agent table ──────────────────────────────────────────────── */
+    .agent-table-wrap {
+      overflow-x: auto;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      margin-top: 20px;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+
+    th {
+      background: rgba(0,212,255,0.07);
+      padding: 11px 16px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--cyan);
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 10px 16px;
+      font-size: 0.82rem;
+      color: #cbd5e1;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      background: rgba(0,212,255,0.08);
+      color: var(--cyan);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* ── SSE timeline ─────────────────────────────────────────────── */
+    .sse-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      padding: 8px 0;
+    }
+
+    .sse-event {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 14px 0;
+      border-left: 2px solid rgba(0,212,255,0.15);
+      padding-left: 24px;
+      position: relative;
+      margin-left: 20px;
+    }
+
+    .sse-event::before {
+      content: '';
+      position: absolute;
+      left: -6px;
+      top: 20px;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 8px rgba(0,212,255,0.5);
+    }
+
+    .sse-event.violet::before { background: var(--violet); box-shadow: 0 0 8px rgba(124,58,237,0.5); }
+    .sse-event.emerald::before { background: var(--emerald); box-shadow: 0 0 8px rgba(16,185,129,0.5); }
+    .sse-event.amber::before { background: var(--amber); box-shadow: 0 0 8px rgba(245,158,11,0.5); }
+
+    .sse-type {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      padding: 3px 10px;
+      border-radius: 6px;
+      min-width: 150px;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    .sse-type.cyan   { background: rgba(0,212,255,0.12); color: var(--cyan); border: 1px solid rgba(0,212,255,0.25); }
+    .sse-type.violet { background: rgba(124,58,237,0.12); color: #a78bfa; border: 1px solid rgba(124,58,237,0.25); }
+    .sse-type.emerald{ background: rgba(16,185,129,0.12); color: #34d399; border: 1px solid rgba(16,185,129,0.25); }
+    .sse-type.amber  { background: rgba(245,158,11,0.12); color: #fcd34d; border: 1px solid rgba(245,158,11,0.25); }
+
+    .sse-desc { font-size: 0.82rem; color: #94a3b8; line-height: 1.5; padding-top: 2px; }
+    .sse-desc strong { color: #e2e8f0; font-weight: 500; }
+
+    /* ── Sandbox tiers ────────────────────────────────────────────── */
+    .tier-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .tier {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+      border-radius: 12px;
+      border: 1px solid;
+      position: relative;
+    }
+
+    .tier.t1 { background: rgba(0,212,255,0.05); border-color: rgba(0,212,255,0.2); }
+    .tier.t2 { background: rgba(124,58,237,0.05); border-color: rgba(124,58,237,0.2); }
+    .tier.t3 { background: rgba(245,158,11,0.05); border-color: rgba(245,158,11,0.2); }
+
+    .tier-num {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .t1 .tier-num { background: rgba(0,212,255,0.15); color: var(--cyan); }
+    .t2 .tier-num { background: rgba(124,58,237,0.15); color: #a78bfa; }
+    .t3 .tier-num { background: rgba(245,158,11,0.15); color: var(--amber); }
+
+    .tier-info h4 { font-size: 0.9rem; font-weight: 600; color: #f1f5f9; margin-bottom: 2px; }
+    .tier-info p  { font-size: 0.8rem; color: #94a3b8; }
+
+    .tier-badge {
+      margin-left: auto;
+      font-size: 0.7rem;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-weight: 600;
+    }
+
+    .t1 .tier-badge { background: rgba(0,212,255,0.1); color: var(--cyan); border: 1px solid rgba(0,212,255,0.2); }
+    .t2 .tier-badge { background: rgba(124,58,237,0.1); color: #a78bfa; border: 1px solid rgba(124,58,237,0.2); }
+    .t3 .tier-badge { background: rgba(245,158,11,0.1); color: var(--amber); border: 1px solid rgba(245,158,11,0.2); }
+
+    .tier-arrow {
+      text-align: center;
+      color: var(--muted);
+      font-size: 1rem;
+      margin: -4px 0;
+      letter-spacing: 2px;
+    }
+
+    /* ── Profile grid ─────────────────────────────────────────────── */
+    .profile-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .profile-card {
+      padding: 16px 18px;
+      background: rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      transition: border-color 0.2s;
+    }
+
+    .profile-card:hover { border-color: rgba(0,212,255,0.2); }
+
+    .profile-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .profile-agents {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .agent-chip {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      padding: 2px 7px;
+      background: rgba(0,212,255,0.06);
+      border: 1px solid rgba(0,212,255,0.12);
+      border-radius: 4px;
+      color: #94a3b8;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 32px 24px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.8rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    footer strong { color: var(--cyan); }
+
+    /* ── Scrollbar ────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.2); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Hero ──────────────────────────────────────────────────────── -->
+<div class="hero">
+  <div class="hero-badge">System Architecture — Live Documentation</div>
+  <h1>JARVIS Autonomous AI<br>Operating System</h1>
+  <p>Production-grade multi-agent AI platform. 37+ specialized agents · Real-time SSE streaming · Multi-tier sandboxed execution · 12 industry workspace profiles.</p>
+  <div class="stats">
+    <div class="stat"><span class="dot" style="background:#00d4ff"></span>37+ Agents</div>
+    <div class="stat"><span class="dot" style="background:#7c3aed"></span>12 Workspace Profiles</div>
+    <div class="stat"><span class="dot" style="background:#10b981"></span>SSE Streaming</div>
+    <div class="stat"><span class="dot" style="background:#f59e0b"></span>E2B · Docker · Host Sandbox</div>
+    <div class="stat"><span class="dot" style="background:#f43f5e"></span>Multi-User Isolated</div>
+  </div>
+</div>
+
+<!-- ── Nav ───────────────────────────────────────────────────────── -->
+<nav>
+  <button class="nav-btn active" onclick="scrollTo('arch')">1. Architecture</button>
+  <button class="nav-btn" onclick="scrollTo('stream')">2. SSE Streaming</button>
+  <button class="nav-btn" onclick="scrollTo('react')">3. ReAct Loop</button>
+  <button class="nav-btn" onclick="scrollTo('sandbox')">4. Sandbox Tiers</button>
+  <button class="nav-btn" onclick="scrollTo('rag')">5. RAG Pipeline</button>
+  <button class="nav-btn" onclick="scrollTo('agents')">6. Agent Registry</button>
+  <button class="nav-btn" onclick="scrollTo('profiles')">7. Profiles</button>
+  <button class="nav-btn" onclick="scrollTo('scenario')">8. Live Scenario</button>
+  <button class="nav-btn" onclick="scrollTo('auth')">9. Auth Flow</button>
+  <button class="nav-btn" onclick="scrollTo('isolation')">10. Data Isolation</button>
+  <button class="nav-btn" onclick="scrollTo('edtech')">11. EdTech Suite</button>
+  <button class="nav-btn" onclick="scrollTo('stack')">12. Tech Stack</button>
+</nav>
+
+<main>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 1. FULL SYSTEM ARCHITECTURE                                   -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="arch">
+    <div class="section-header">
+      <div class="section-num">01</div>
+      <div class="section-meta">
+        <h2>Comprehensive System Architecture</h2>
+        <p>Full component map from React frontend through FastAPI, Orchestrator, and the 37-agent pool to external APIs.</p>
+      </div>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-card-header">
+        <div class="dot-group">
+          <span style="background:#f43f5e"></span>
+          <span style="background:#f59e0b"></span>
+          <span style="background:#10b981"></span>
+        </div>
+        <div class="diagram-label">jarvis_architecture_diagrams.html · Diagram 1/8</div>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph TB
+    subgraph FE["Frontend Layer — React 18 + Vite"]
+        UI[React Dashboard UI]
+        Upload[File Uploader]
+        AgentVis[Agent Visualizer]
+        Stream[SSE Stream Consumer]
+    end
+
+    subgraph API["API Layer — FastAPI + Uvicorn"]
+        Server["FastAPI Server\n/api/query\n/api/query/stream\n/api/upload"]
+        Auth[JWT Auth — Supabase]
+    end
+
+    subgraph Brain["Core Orchestration — /backend/core/"]
+        Memory[(Conversation Memory)]
+        Planner{"Planner LLM\nGroq Llama-3.3-70B"}
+        Synthesizer["Synthesizer LLM\nStreaming Tokens"]
+        Orchestrator[Sequential Orchestrator]
+        Registry[Self-Describing Agent Registry]
+        Sandbox["ExecutionSandbox\nE2B → Docker → Host"]
+        Analytics[Analytics + Cost Tracker]
+        Notifications[SSE Notification Manager]
+    end
+
+    subgraph AgentPool["Agent Pool — 37+ Agents /backend/agents/"]
+        A1["🔍 Search — Tavily"]
+        A2["💻 Code — Sandbox"]
+        A3["📊 Analyse — RAG"]
+        A4["📧 Email — Gmail"]
+        A5["🗄️ Database — NL→SQL"]
+        A6["💰 Finance — yfinance"]
+        A7["🎓 EdTech Suite\n11 Agents"]
+        A8["☁️ Cloud DevOps\nSec · Compliance"]
+        A9["📣 Marketing · Legal\nHR · Healthcare"]
+        A10["🤖 Agent Builder\nDynamic Hot-Register"]
+    end
+
+    subgraph External["External Services"]
+        Groq[Groq LLM API]
+        Tavily[Tavily Search]
+        E2B[E2B Cloud Sandbox]
+        Supabase[Supabase Auth]
+        Google[Google OAuth2\nDrive·Docs·Sheets·Calendar]
+        Gmail[Gmail IMAP/SMTP]
+        Cohere[Cohere Reranker]
+    end
+
+    UI -->|"POST /api/query/stream (SSE)"| Server
+    Upload -->|"POST /api/upload"| Server
+    AgentVis --> Stream
+    Server --> Auth
+    Auth --> Supabase
+    Server --> Orchestrator
+    Orchestrator --> Memory
+    Orchestrator --> Planner
+    Planner --> Registry
+    Registry --> AgentPool
+    A2 --> Sandbox
+    A3 -->|"BM25 + FAISS + Rerank"| Cohere
+    Synthesizer -->|"StreamingResponse SSE"| Stream
+    AgentPool -->|Results| Planner
+    Planner -->|"All steps done"| Synthesizer
+    Server --> Notifications
+    Planner --> Groq
+    Synthesizer --> Groq
+    A1 --> Tavily
+    Sandbox --> E2B
+    A4 --> Gmail
+    A7 --> Google
+
+    classDef frontend fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#e2e8f0
+    classDef api fill:#0f172a,stroke:#00d4ff,stroke-width:2px,color:#e2e8f0
+    classDef core fill:#0f172a,stroke:#7c3aed,stroke-width:2px,color:#e2e8f0
+    classDef agent fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#e2e8f0
+    classDef ext fill:#0f172a,stroke:#f59e0b,stroke-width:1px,stroke-dasharray:4 4,color:#e2e8f0
+
+    class UI,Upload,AgentVis,Stream frontend
+    class Server,Auth api
+    class Memory,Planner,Synthesizer,Orchestrator,Registry,Sandbox,Analytics,Notifications core
+    class A1,A2,A3,A4,A5,A6,A7,A8,A9,A10 agent
+    class Groq,Tavily,E2B,Supabase,Google,Gmail,Cohere ext
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 2. SSE STREAMING                                              -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="stream">
+    <div class="section-header">
+      <div class="section-num">02</div>
+      <div class="section-meta">
+        <h2>Real-Time SSE Streaming Pipeline</h2>
+        <p>How <code>POST /api/query/stream</code> delivers token-by-token responses. The React frontend consumes events via <code>ReadableStream</code> and renders a live blinking cursor as the Synthesizer streams.</p>
+      </div>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-card-header">
+        <div class="dot-group">
+          <span style="background:#f43f5e"></span>
+          <span style="background:#f59e0b"></span>
+          <span style="background:#10b981"></span>
+        </div>
+        <div class="diagram-label">POST /api/query/stream · SSE Event Sequence</div>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor User
+    participant FE as React Frontend
+    participant API as FastAPI SSE Endpoint
+    participant Thread as Background Thread
+    participant Plan as Planner LLM
+    participant Agent as Agent Pool
+    participant Synth as Synthesizer LLM
+
+    User->>FE: Types message, hits Send
+    FE->>API: POST /api/query/stream (JWT + body)
+    API->>Thread: Spawn pipeline thread
+    API-->>FE: 200 OK — text/event-stream begins
+
+    rect rgb(15,23,42)
+        Note over Plan,Agent: ── ReAct Loop (up to 5 steps) ──
+        Thread->>Plan: Query + memory + scratchpad
+        Plan->>Thread: action=run_agent, target=search
+        Thread-->>FE: data: {"type":"step_start","agent":"search"}
+        Thread->>Agent: Execute search agent
+        Agent-->>Thread: Search results
+        Thread-->>FE: data: {"type":"agent_result","agent":"search"}
+
+        Thread->>Plan: Updated scratchpad
+        Plan->>Thread: action=run_agent, target=code
+        Thread-->>FE: data: {"type":"step_start","agent":"code"}
+        Thread->>Agent: Execute code agent (sandbox)
+        Agent-->>Thread: Code output
+        Thread-->>FE: data: {"type":"agent_result","agent":"code"}
+
+        Thread->>Plan: Updated scratchpad
+        Plan->>Thread: action=finish
+    end
+
+    rect rgb(15,23,42)
+        Note over Synth: ── Streaming Synthesis ──
+        Thread->>Synth: Combined results + query
+        loop Token by token
+            Synth-->>Thread: AIMessageChunk
+            Thread-->>FE: data: {"type":"synthesis_chunk","chunk":"..."}
+        end
+    end
+
+    Thread-->>FE: data: {"type":"done","agents_used":["search","code"]}
+    Thread-->>FE: data: {"type":"stream_end"}
+    FE->>User: Full response rendered ✓
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 24px;">
+      <h3 style="font-size:0.95rem; font-weight:600; color:#94a3b8; margin-bottom:16px; text-transform:uppercase; letter-spacing:0.06em;">SSE Event Reference</h3>
+      <div class="sse-timeline">
+        <div class="sse-event">
+          <span class="sse-type cyan">step_start</span>
+          <div class="sse-desc"><strong>Planner selected an agent.</strong> Emitted before each agent executes. Contains <code>agent</code>, <code>thought</code>, <code>step</code>. UI renders a purple step-pill badge.</div>
+        </div>
+        <div class="sse-event violet">
+          <span class="sse-type violet">agent_result</span>
+          <div class="sse-desc"><strong>Agent finished execution.</strong> Contains <code>agent</code>, <code>result</code>, <code>step</code>. Planner adds this to its scratchpad.</div>
+        </div>
+        <div class="sse-event emerald">
+          <span class="sse-type emerald">synthesis_chunk</span>
+          <div class="sse-desc"><strong>One LLM token from the Synthesizer.</strong> UI appends chunk to live message bubble with a blinking cyan cursor. Produces the ChatGPT streaming effect.</div>
+        </div>
+        <div class="sse-event amber">
+          <span class="sse-type amber">done</span>
+          <div class="sse-desc"><strong>Pipeline complete.</strong> Contains final <code>agents_used</code> list. UI hides cursor, shows agent badges. Memory is persisted to SQLite.</div>
+        </div>
+        <div class="sse-event">
+          <span class="sse-type cyan">stream_end</span>
+          <div class="sse-desc"><strong>Connection close signal.</strong> Frontend closes the <code>ReadableStream</code> reader. Fallback cleanup event.</div>
+        </div>
+        <div class="sse-event violet">
+          <span class="sse-type violet">needs_confirmation</span>
+          <div class="sse-desc"><strong>Agent Builder intercepted.</strong> Pauses execution and prompts user to confirm or abort new agent creation.</div>
+        </div>
+        <div class="sse-event amber">
+          <span class="sse-type amber">error</span>
+          <div class="sse-desc"><strong>Pipeline or synthesis failure.</strong> Contains <code>detail</code> message. UI renders error state inline in the message bubble.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 3. REACT LOOP                                                 -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="react">
+    <div class="section-header">
+      <div class="section-num">03</div>
+      <div class="section-meta">
+        <h2>ReAct Agentic Loop (State Machine)</h2>
+        <p>JARVIS runs a full Reason+Act loop — the planner iterates up to 5 steps, building a scratchpad before synthesizing a final answer.</p>
+      </div>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-card-header">
+        <div class="dot-group">
+          <span style="background:#f43f5e"></span>
+          <span style="background:#f59e0b"></span>
+          <span style="background:#10b981"></span>
+        </div>
+        <div class="diagram-label">orchestrator.py · ReAct Loop State Machine</div>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+stateDiagram-v2
+    [*] --> RequestReceived
+    RequestReceived --> LoadMemory : Fetch session conversation history
+    LoadMemory --> BuildScratchpad : Format previous steps
+
+    state PlannerLoop {
+        [*] --> Thought
+        Thought --> SelectAgent : Choose best agent for this step
+        SelectAgent --> CheckBuilder : Is it agent_builder?
+        CheckBuilder --> AwaitConfirm : Yes — pause for user
+        CheckBuilder --> EmitStepStart : No — proceed
+        AwaitConfirm --> EmitStepStart : User confirmed
+        AwaitConfirm --> Abort : User rejected
+        EmitStepStart --> ExecuteAgent : SSE step_start event fired
+        ExecuteAgent --> EmitResult : SSE agent_result event fired
+        EmitResult --> UpdateScratchpad : Append result to scratchpad
+        UpdateScratchpad --> StepLimitCheck : Increment step counter
+        StepLimitCheck --> Thought : step < 5
+        StepLimitCheck --> ForceSynth : step == 5
+        Thought --> Finished : action == finish
+    }
+
+    BuildScratchpad --> PlannerLoop
+    PlannerLoop --> Synthesizer : All steps done or finish action
+    ForceSynth --> Synthesizer
+    Synthesizer --> StreamTokens : llm.stream() — token by token
+    StreamTokens --> SaveMemory : Persist user+assistant turn
+    SaveMemory --> [*]
+    Abort --> [*]
+        </div>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="info-card">
+        <h4>🧠 Planner LLM</h4>
+        <p>Groq <code>llama-3.3-70b-versatile</code>. Receives: original query, agent descriptions, conversation history, and the full reasoning scratchpad. Returns: next agent name + task query.</p>
+      </div>
+      <div class="info-card">
+        <h4>📝 Scratchpad Pattern</h4>
+        <p>Each step is recorded as <em>Thought → Action → Observation</em>. All previous steps are injected into the next planner call, enabling multi-hop reasoning and context accumulation.</p>
+      </div>
+      <div class="info-card">
+        <h4>🔀 Dynamic Agent Selection</h4>
+        <p>The planner reads live <code>agent.description</code> strings from the registry. When new agents are added or the Agent Builder creates one, the planner discovers them automatically.</p>
+      </div>
+      <div class="info-card">
+        <h4>⚡ Synthesizer Streaming</h4>
+        <p>After all steps, the Synthesizer calls <code>(prompt | llm).stream()</code>. Each <code>AIMessageChunk</code> is pushed as a <code>synthesis_chunk</code> SSE event to the frontend in real-time.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 4. SANDBOX TIERS                                              -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="sandbox">
+    <div class="section-header">
+      <div class="section-num">04</div>
+      <div class="section-meta">
+        <h2>Multi-Tier Execution Sandbox</h2>
+        <p>The Code Agent and Package Manager auto-detect the best available execution environment at startup and degrade gracefully if a tier fails.</p>
+      </div>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-card-header">
+        <div class="dot-group">
+          <span style="background:#f43f5e"></span>
+          <span style="background:#f59e0b"></span>
+          <span style="background:#10b981"></span>
+        </div>
+        <div class="diagram-label">backend/core/sandbox.py · ExecutionSandbox class</div>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph TD
+    Start([ExecutionSandbox.__init__]) --> CheckE2B{E2B_API_KEY\nset in .env?}
+
+    CheckE2B -->|Yes| E2B["Tier 1: E2B Cloud Sandbox\nSandbox.create()\nRemote Python 3.13 VM\nFully isolated network"]
+    CheckE2B -->|No| CheckDocker{Docker daemon\nreachable?}
+
+    CheckDocker -->|Yes| Docker["Tier 2: Local Docker Container\njarvis-sandbox image\nAuto-built if missing\nMounts /workspace volume"]
+    CheckDocker -->|No| Host["Tier 3: Host Subprocess\nsubprocess.run()\nRuns in user workspace dir\nWarning banner shown to user"]
+
+    E2B -->|Runtime failure| CheckDocker
+    Docker -->|Runtime failure| Host
+
+    E2B --> API1["execute_python() → sb.run_code()\nexecute_command() → sb.commands.run()\nwrite_file() → sb.files.write()\nread_file() → sb.files.read()\nlist_dir() → sb.files.list()"]
+
+    Docker --> API2["execute_python() → write .py → docker exec\nexecute_command() → docker exec\nwrite_file() → local filesystem\nread_file() → local filesystem"]
+
+    Host --> API3["execute_python() → write .py → subprocess\nexecute_command() → subprocess.run()\nAll paths → workspace dir\n[WARNING] banner injected"]
+
+    classDef tier1 fill:#0f172a,stroke:#00d4ff,stroke-width:2px,color:#e2e8f0
+    classDef tier2 fill:#0f172a,stroke:#7c3aed,stroke-width:2px,color:#e2e8f0
+    classDef tier3 fill:#0f172a,stroke:#f59e0b,stroke-width:2px,color:#e2e8f0
+    classDef api fill:#0f172a,stroke:#334155,stroke-width:1px,color:#94a3b8
+
+    class E2B tier1
+    class Docker tier2
+    class Host tier3
+    class API1,API2,API3 api
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 24px;">
+      <div class="tier-stack">
+        <div class="tier t1">
+          <div class="tier-num">T1</div>
+          <div class="tier-info">
+            <h4>E2B Cloud Sandbox</h4>
+            <p>Remote VM via <code>e2b-code-interpreter</code> SDK. Fully isolated — no access to host. Python 3.13. Auto-killed after request via <code>sandbox.kill()</code>.</p>
+          </div>
+          <span class="tier-badge">Primary</span>
+        </div>
+        <div class="tier-arrow">↓ fallback if E2B_API_KEY missing or E2B call fails</div>
+        <div class="tier t2">
+          <div class="tier-num">T2</div>
+          <div class="tier-info">
+            <h4>Local Docker Container</h4>
+            <p>Persistent <code>jarvis-sandbox</code> container with <code>/workspace</code> volume mount. Auto-built from Dockerfile if image doesn't exist. Isolated from host OS.</p>
+          </div>
+          <span class="tier-badge">Secondary</span>
+        </div>
+        <div class="tier-arrow">↓ fallback if Docker daemon unavailable</div>
+        <div class="tier t3">
+          <div class="tier-num">T3</div>
+          <div class="tier-info">
+            <h4>Host Subprocess</h4>
+            <p>Direct <code>subprocess.run()</code> in the user's workspace directory. No isolation. A warning banner is appended to all outputs so the user is informed.</p>
+          </div>
+          <span class="tier-badge">Fallback</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 5. RAG PIPELINE                                               -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="rag">
+    <div class="section-header">
+      <div class="section-num">05</div>
+      <div class="section-meta">
+        <h2>Hybrid RAG Pipeline (Analyse Agent)</h2>
+        <p>BM25 keyword search + FAISS semantic search combined with Cohere reranking. Multimodal vision (Llama 4 Scout) handles image documents. All indexes are per-user isolated.</p>
+      </div>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-card-header">
+        <div class="dot-group">
+          <span style="background:#f43f5e"></span>
+          <span style="background:#f59e0b"></span>
+          <span style="background:#10b981"></span>
+        </div>
+        <div class="diagram-label">backend/agents/analyse_agent.py · Hybrid RAG</div>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph LR
+    subgraph Ingest["Document Ingestion (Upload Time)"]
+        Doc["Uploaded Files\nPDF · DOCX · PPTX · Images"]
+        Loader["Document Loader\npypdf · docx2txt · pillow"]
+        Split["Recursive Text Splitter\n512 tokens, 50 overlap"]
+        Embed["Sentence Transformer\nall-MiniLM-L6-v2"]
+        FAISS[("FAISS Index\nPer-user vector store")]
+        BM25[("BM25 Index\nKeyword inverted index")]
+        Vision["Llama 4 Scout\nMultimodal Vision LLM"]
+    end
+
+    subgraph Query["Query Time (Analyse Agent)"]
+        Q["User Query"]
+        EmbedQ["Embed Query\nSentence Transformer"]
+        SemSearch["Semantic Search\nTop-K FAISS"]
+        KWSearch["Keyword Search\nBM25 Retrieval"]
+        Merge["Merge + Deduplicate\nCandidate Chunks"]
+        Rerank["Cohere Reranker\nCross-encoder scoring"]
+        Context["Top-5 Reranked Chunks"]
+        LLM["Groq LLM\nllama-3.3-70b"]
+        Answer["Context-Aware Answer"]
+    end
+
+    Doc --> Loader
+    Loader -->|"Text chunks"| Split
+    Loader -->|"Image pages"| Vision
+    Split --> Embed
+    Split --> BM25
+    Embed --> FAISS
+    Vision -->|"Caption + analysis"| FAISS
+
+    Q --> EmbedQ
+    EmbedQ --> SemSearch
+    Q --> KWSearch
+    SemSearch --> FAISS
+    KWSearch --> BM25
+    FAISS -->|"Top-K semantic"| Merge
+    BM25 -->|"Top-K keyword"| Merge
+    Merge --> Rerank
+    Rerank --> Context
+    Context --> LLM
+    Q --> LLM
+    LLM --> Answer
+
+    classDef ingest fill:#0f172a,stroke:#7c3aed,stroke-width:1px,color:#e2e8f0
+    classDef query fill:#0f172a,stroke:#00d4ff,stroke-width:1px,color:#e2e8f0
+    classDef store fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#e2e8f0
+
+    class Doc,Loader,Split,Embed,Vision ingest
+    class Q,EmbedQ,SemSearch,KWSearch,Merge,Rerank,Context,LLM,Answer query
+    class FAISS,BM25 store
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 6. AGENT REGISTRY TABLE                                       -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="agents">
+    <div class="section-header">
+      <div class="section-num">06</div>
+      <div class="section-meta">
+        <h2>Agent Registry — 37+ Specialized Agents</h2>
+        <p>Auto-discovered from <code>backend/agents/</code> at startup. Each agent exposes a <code>name</code>, <code>description</code>, and <code>run(query)</code> method. The Planner reads descriptions dynamically.</p>
+      </div>
+    </div>
+
+    <div class="agent-table-wrap">
+      <table>
+        <thead>
+          <tr><th>Agent</th><th>Suite</th><th>Core Technology</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>search</code></td><td>Core</td><td>Tavily API</td><td>Real-time web search with structured results</td></tr>
+          <tr><td><code>code</code></td><td>Core</td><td>E2B / Docker / Host</td><td>Sandboxed Python execution, file I/O, self-correction on errors</td></tr>
+          <tr><td><code>analyse</code></td><td>Core</td><td>FAISS + BM25 + Cohere + Llama 4 Scout</td><td>Hybrid RAG over local documents, multimodal image analysis</td></tr>
+          <tr><td><code>summary</code></td><td>Core</td><td>Groq LLM</td><td>Copywriting, summarization, text formatting</td></tr>
+          <tr><td><code>email</code></td><td>Services</td><td>Gmail IMAP/SMTP</td><td>Read inbox threads, send emails with attachments</td></tr>
+          <tr><td><code>calendar</code></td><td>Services</td><td>Google Calendar API</td><td>Create events, find free slots, schedule meetings</td></tr>
+          <tr><td><code>database</code></td><td>Services</td><td>SQLite + LangChain</td><td>Natural language to SQL with schema self-healing</td></tr>
+          <tr><td><code>scraper</code></td><td>Services</td><td>requests + BeautifulSoup</td><td>Clean HTML extraction, strips nav/scripts/styles</td></tr>
+          <tr><td><code>maps</code></td><td>Services</td><td>Geopy + Folium</td><td>Geolocation, routing, interactive map rendering</td></tr>
+          <tr><td><code>finance</code></td><td>Media</td><td>yfinance</td><td>Stock prices, historical charts, crypto data</td></tr>
+          <tr><td><code>image_gen</code></td><td>Media</td><td>Image Generation API</td><td>Text-to-image synthesis</td></tr>
+          <tr><td><code>visualization</code></td><td>Media</td><td>Matplotlib + Seaborn</td><td>Chart rendering saved as static PNG images</td></tr>
+          <tr><td><code>voice</code></td><td>Media</td><td>STT / TTS</td><td>Speech-to-text and text-to-speech</td></tr>
+          <tr><td><code>translation</code></td><td>Media</td><td>Groq LLM</td><td>Multi-language translation</td></tr>
+          <tr><td><code>video_to_mp3</code></td><td>Media</td><td>ffmpeg</td><td>Audio extraction from video files</td></tr>
+          <tr><td><code>devops</code></td><td>Systems</td><td>subprocess + Docker API</td><td>Process monitoring, Docker status, GitHub workflow audits</td></tr>
+          <tr><td><code>package_manager</code></td><td>Systems</td><td>pip / npm + ExecutionSandbox</td><td>Validated dependency installs inside the active sandbox tier</td></tr>
+          <tr><td><code>notification</code></td><td>Systems</td><td>SSE / FastAPI</td><td>Push toast notifications to client dashboard</td></tr>
+          <tr><td><code>agent_builder</code></td><td>Meta</td><td>Groq LLM + importlib</td><td>Writes, validates, and hot-registers new Python agents at runtime</td></tr>
+          <tr><td><code>analyst_team</code></td><td>Teams</td><td>Sub-orchestrator</td><td>Coordinates Analyse + Finance + Visualization agents</td></tr>
+          <tr><td><code>dev_team</code></td><td>Teams</td><td>Sub-orchestrator</td><td>Coordinates Code + DevOps + PackageManager agents</td></tr>
+          <tr><td><code>ops_team</code></td><td>Teams</td><td>Sub-orchestrator</td><td>Coordinates Calendar + Email + Notification agents</td></tr>
+          <tr><td><code>cloud_infra</code></td><td>Cloud DevOps</td><td>Terraform + Kubernetes</td><td>IaC dry runs, K8s pod health, AWS cost auditing</td></tr>
+          <tr><td><code>github_workflow</code></td><td>Cloud DevOps</td><td>GitHub API</td><td>PR summaries, CI/CD pipeline audits, issue triage</td></tr>
+          <tr><td><code>sec_ops</code></td><td>Cybersec</td><td>CVE APIs</td><td>Dependency vulnerability auditing, auth log inspection</td></tr>
+          <tr><td><code>compliance</code></td><td>Cybersec</td><td>Groq LLM</td><td>SOC2, GDPR, ISO27001 compliance readiness checks</td></tr>
+          <tr><td><code>market_intelligence</code></td><td>Finance BI</td><td>yfinance + Groq</td><td>Real-time fundamentals, crypto sentiment, trend analysis</td></tr>
+          <tr><td><code>financial_reporting</code></td><td>Finance BI</td><td>Groq LLM + ReportLab</td><td>P&amp;L statement generation, expense auditing, PDF export</td></tr>
+          <tr><td><code>biomedical_rag</code></td><td>Healthcare</td><td>PubMed API + FAISS</td><td>Research paper indexing, clinical trial synthesis</td></tr>
+          <tr><td><code>marketing_campaign</code></td><td>Marketing</td><td>Groq LLM</td><td>SEO strategy, multi-platform ad copy, email sequences</td></tr>
+          <tr><td><code>multimedia_processor</code></td><td>Marketing</td><td>Groq LLM</td><td>Video storyboard scripts, media production outlines</td></tr>
+          <tr><td><code>legal_contract</code></td><td>Legal HR</td><td>Groq LLM</td><td>Contract clause extraction, NDA risk rating</td></tr>
+          <tr><td><code>talent_ops</code></td><td>Legal HR</td><td>Groq LLM</td><td>Resume skill parsing, technical interview rubrics</td></tr>
+          <tr><td><code>edtech_agent</code></td><td>EdTech</td><td>Google Workspace + ReportLab</td><td>11 sub-agents: lesson plans, exam papers, gradebooks, tutoring, scheduling</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 7. WORKSPACE PROFILES                                         -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="profiles">
+    <div class="section-header">
+      <div class="section-num">07</div>
+      <div class="section-meta">
+        <h2>12 Industry Workspace Profiles</h2>
+        <p>At login, users select a profile. JARVIS loads only the agents relevant to that role — reducing noise for the Planner LLM and showing a curated UI.</p>
+      </div>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-card-header">
+        <div class="dot-group">
+          <span style="background:#f43f5e"></span>
+          <span style="background:#f59e0b"></span>
+          <span style="background:#10b981"></span>
+        </div>
+        <div class="diagram-label">backend/config.py · DEFAULT_ROLE_AGENTS</div>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph LR
+    Login([User Login]) --> ProfileSelect{Select\nWorkspace Profile}
+
+    ProfileSelect --> P1["💻 Developer\ncode · devops · package_manager\ndatabase · agent_builder · dev_team"]
+    ProfileSelect --> P2["📊 Analyst\nanalyse · visualization · finance\ndatabase · market_intelligence · analyst_team"]
+    ProfileSelect --> P3["🎨 Designer\nimage_gen · visualization · translation · summary"]
+    ProfileSelect --> P4["📋 Manager\ncalendar · email · notification\ndatabase · ops_team"]
+    ProfileSelect --> P5["☁️ Cloud DevOps\ncloud_infra · github_workflow\ndevops · code · sec_ops"]
+    ProfileSelect --> P6["📈 Financial Analyst\nmarket_intelligence · financial_reporting\nfinance · analyse · visualization"]
+    ProfileSelect --> P7["🛡️ CyberSec Auditor\nsec_ops · compliance · code\ndatabase · analyse"]
+    ProfileSelect --> P8["🧬 Healthcare Researcher\nbiomedical_rag · analyse\ntranslation · summary"]
+    ProfileSelect --> P9["📣 Creative Marketer\nmarketing_campaign · multimedia_processor\nimage_gen · search"]
+    ProfileSelect --> P10["⚖️ Legal Ops\nlegal_contract · talent_ops\nanalyse · summary"]
+    ProfileSelect --> P11["🎓 EdTech Studio\nedtech_agent (11 agents)\nsearch · analyse · calendar · sheets"]
+    ProfileSelect --> P12["👤 Guest\nsearch · summary · translation"]
+
+    classDef profile fill:#0f172a,stroke:#334155,stroke-width:1px,color:#e2e8f0
+    class P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12 profile
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 8. REAL-WORLD SCENARIO                                        -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="scenario">
+    <div class="section-header">
+      <div class="section-num">08</div>
+      <div class="section-meta">
+        <h2>Real-World Scenario — Complex Multi-Agent Execution</h2>
+        <p><strong>User prompt:</strong> <em>"Get the second-hand car market trends, create statistical charts, generate a PDF report, and email it to test@example.com"</em></p>
+      </div>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-card-header">
+        <div class="dot-group">
+          <span style="background:#f43f5e"></span>
+          <span style="background:#f59e0b"></span>
+          <span style="background:#10b981"></span>
+        </div>
+        <div class="diagram-label">4-step multi-agent execution · search → visualization → code → email</div>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph TD
+    User(["👤 User\n4-step complex prompt"])
+    FE["React Dashboard\nStreaming SSE consumer"]
+    API["FastAPI /api/query/stream"]
+
+    User --> FE
+    FE -->|"JWT + body"| API
+
+    subgraph Loop["ReAct Loop — 4 Steps"]
+        direction TB
+
+        subgraph S1["Step 1 — Market Research"]
+            P1{"Planner\nStep 1"}
+            Search["🔍 Search Agent\nTavily API"]
+            Web[("Live Web\nMarket Data")]
+            P1 -->|"action: search"| Search
+            Search <-->|"Fetch trends"| Web
+        end
+
+        subgraph S2["Step 2 — Visualization"]
+            P2{"Planner\nStep 2"}
+            Vis["📊 Visualization Agent\nMatplotlib + Seaborn"]
+            FS1[("File System\nPNG Charts")]
+            P2 -->|"action: visualization"| Vis
+            Vis -->|"Save charts"| FS1
+        end
+
+        subgraph S3["Step 3 — PDF Generation"]
+            P3{"Planner\nStep 3"}
+            Code["💻 Code Agent\nSandboxed Python\nReportLab PDF"]
+            FS2[("File System\nreport.pdf")]
+            P3 -->|"action: code"| Code
+            Code <-->|"Read PNGs · Write PDF"| FS2
+        end
+
+        subgraph S4["Step 4 — Email Delivery"]
+            P4{"Planner\nStep 4"}
+            Email["📧 Email Agent\nGmail SMTP"]
+            Recipient(["📬 test@example.com"])
+            P4 -->|"action: email"| Email
+            Email -->|"Send PDF attachment"| Recipient
+        end
+
+        Search -->|"Market data"| P2
+        Vis -->|"Chart paths"| P3
+        Code -->|"PDF path"| P4
+        Email -->|"Sent ✓"| Finish{"action: finish"}
+    end
+
+    API --> S1
+    Finish --> Synth["Synthesizer LLM\nStreams summary tokens"]
+    Synth -->|"synthesis_chunk × N"| FE
+    FE -->|"Renders live response"| User
+
+    classDef planner fill:#0f172a,stroke:#7c3aed,stroke-width:2px,color:#e2e8f0
+    classDef agent fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#e2e8f0
+    classDef external fill:#0f172a,stroke:#f59e0b,stroke-width:1px,stroke-dasharray:4 4,color:#94a3b8
+    classDef system fill:#0f172a,stroke:#00d4ff,stroke-width:1px,color:#e2e8f0
+
+    class P1,P2,P3,P4,Finish planner
+    class Search,Vis,Code,Email agent
+    class Web,FS1,FS2,Recipient external
+    class FE,API,Synth system
+        </div>
+      </div>
+    </div>
+
+    <div class="info-grid" style="margin-top:24px;">
+      <div class="info-card">
+        <h4>📡 SSE Events Fired</h4>
+        <ul>
+          <li><code>step_start</code> × 4 (one per agent)</li>
+          <li><code>agent_result</code> × 4</li>
+          <li><code>synthesis_chunk</code> × ~80 tokens</li>
+          <li><code>done</code> + <code>stream_end</code></li>
+        </ul>
+      </div>
+      <div class="info-card">
+        <h4>🗂️ Files Created</h4>
+        <ul>
+          <li><code>data/workspace/{user}/car_market_bar.png</code></li>
+          <li><code>data/workspace/{user}/car_market_trend.png</code></li>
+          <li><code>data/workspace/{user}/car_report.pdf</code></li>
+        </ul>
+      </div>
+      <div class="info-card">
+        <h4>⏱️ Approximate Latency</h4>
+        <ul>
+          <li>Search: ~1.5s (Tavily API)</li>
+          <li>Visualization: ~2s (Matplotlib)</li>
+          <li>Code/PDF: ~3s (sandbox + ReportLab)</li>
+          <li>Email: ~1s (Gmail SMTP)</li>
+        </ul>
+      </div>
+      <div class="info-card">
+        <h4>🔐 Data Isolation</h4>
+        <p>All file paths are scoped to the authenticated user via <code>contextvars.ContextVar(current_user_id)</code>. No data is shared between users.</p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- 9. AUTHENTICATION FLOW                                       -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="auth">
+    <div class="section-header">
+      <div class="section-num">09</div>
+      <div class="section-meta">
+        <h2>Authentication &amp; Request Authorization Flow</h2>
+        <p>Every API request is verified against Supabase. A <code>contextvars.ContextVar</code> scopes all data operations to the authenticated user — ensuring zero cross-user data leakage.</p>
+      </div>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-card-header">
+        <div class="dot-group">
+          <span style="background:#f43f5e"></span>
+          <span style="background:#f59e0b"></span>
+          <span style="background:#10b981"></span>
+        </div>
+        <div class="diagram-label">backend/api/server.py · get_current_user() dependency</div>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor User
+    participant FE as React Frontend
+    participant Supa as Supabase Auth
+    participant API as FastAPI Server
+    participant CV as ContextVar
+    participant Store as Per-User Storage
+
+    Note over User,FE: ── Sign-Up / Sign-In ──
+    User->>FE: Enter email + password
+    FE->>Supa: supabase.auth.signInWithPassword()
+    Supa-->>FE: JWT access_token + user.id
+    FE->>FE: Store token in state
+
+    Note over FE,Store: ── Every API Request ──
+    FE->>API: POST /api/query/stream
+    Note right of FE: Authorization: Bearer &lt;JWT&gt;
+
+    API->>Supa: GET /auth/v1/user (verify JWT)
+    Supa-->>API: { id: "user-uuid", email: "..." }
+
+    API->>CV: current_user_id.set("user-uuid")
+    Note right of CV: Thread-local context var
+
+    API->>Store: load_enabled_agents(user_id)
+    Store-->>API: Per-user agent config JSON
+
+    API->>Store: ConversationMemory(session_id)
+    Store-->>API: SQLite: data/databases/{user_id}.db
+
+    API->>Store: get_user_documents_dir()
+    Store-->>API: data/documents/{user_id}/
+
+    API->>Store: FAISS index path
+    Store-->>API: data/faiss_index/{user_id}/
+
+    Note over API,Store: All reads/writes scoped to user_id
+    API-->>FE: SSE stream response
+        </div>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="info-card">
+        <h4>🔑 JWT Verification</h4>
+        <p>Every request calls Supabase <code>/auth/v1/user</code> with the Bearer token. A 401 is returned immediately if the token is expired or invalid — no request reaches the orchestrator.</p>
+      </div>
+      <div class="info-card">
+        <h4>🧵 ContextVar Scoping</h4>
+        <p><code>current_user_id: ContextVar[str]</code> is set at the start of each request handler. All downstream functions (config, memory, sandbox, agents) call <code>current_user_id.get()</code> to resolve the correct user paths.</p>
+      </div>
+      <div class="info-card">
+        <h4>🏢 Profile Selection</h4>
+        <p>On login, the frontend stores the selected workspace profile (e.g. <code>developer</code>, <code>edtech_studio</code>). This is saved as <code>data/databases/{user_id}/profile.json</code> and loaded on each request to filter the agent pool.</p>
+      </div>
+      <div class="info-card">
+        <h4>🔒 No Shared State</h4>
+        <p>FAISS index, SQLite DB, document uploads, sandbox workspace, and profile config are all stored under <code>data/{resource}/{user_id}/</code>. Concurrent multi-user requests never touch the same files.</p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- 10. MULTI-USER DATA ISOLATION                                -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="isolation">
+    <div class="section-header">
+      <div class="section-num">10</div>
+      <div class="section-meta">
+        <h2>Multi-User Data Isolation Architecture</h2>
+        <p>Every storage resource is namespaced under the authenticated user's ID. This diagram shows the complete per-user data graph for two concurrent users.</p>
+      </div>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-card-header">
+        <div class="dot-group">
+          <span style="background:#f43f5e"></span>
+          <span style="background:#f59e0b"></span>
+          <span style="background:#10b981"></span>
+        </div>
+        <div class="diagram-label">backend/config.py · per-user path helpers</div>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph TB
+    subgraph Server["FastAPI Server (Shared Process)"]
+        CV1["current_user_id = 'alice-uuid'
+(ContextVar — request A)"]
+        CV2["current_user_id = 'bob-uuid'
+(ContextVar — request B)"]
+    end
+
+    subgraph AliceData["Alice's Isolated Workspace"]
+        AD1["data/documents/alice-uuid/
+report.pdf · notes.docx"]
+        AD2["data/faiss_index/alice-uuid/
+index.faiss · index.pkl"]
+        AD3["data/databases/alice-uuid/
+conversation.db · profile.json"]
+        AD4["data/workspace/alice-uuid/
+script.py · output.csv"]
+        AD5["data/generated_images/alice-uuid/
+chart_1.png"]
+    end
+
+    subgraph BobData["Bob's Isolated Workspace"]
+        BD1["data/documents/bob-uuid/
+contract.pdf"]
+        BD2["data/faiss_index/bob-uuid/
+index.faiss · index.pkl"]
+        BD3["data/databases/bob-uuid/
+conversation.db · profile.json"]
+        BD4["data/workspace/bob-uuid/
+analysis.py"]
+        BD5["data/generated_images/bob-uuid/
+market_chart.png"]
+    end
+
+    CV1 --> AD1
+    CV1 --> AD2
+    CV1 --> AD3
+    CV1 --> AD4
+    CV1 --> AD5
+
+    CV2 --> BD1
+    CV2 --> BD2
+    CV2 --> BD3
+    CV2 --> BD4
+    CV2 --> BD5
+
+    classDef alice fill:#0f172a,stroke:#00d4ff,stroke-width:2px,color:#e2e8f0
+    classDef bob fill:#0f172a,stroke:#7c3aed,stroke-width:2px,color:#e2e8f0
+    classDef server fill:#0f172a,stroke:#10b981,stroke-width:1px,color:#e2e8f0
+
+    class AD1,AD2,AD3,AD4,AD5 alice
+    class BD1,BD2,BD3,BD4,BD5 bob
+    class CV1,CV2 server
+        </div>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="info-card">
+        <h4>📁 Documents Store</h4>
+        <p><code>data/documents/{user_id}/</code> — PDFs, DOCX, PPTX uploaded via <code>POST /api/upload</code>. Only used to build the user's own FAISS index.</p>
+      </div>
+      <div class="info-card">
+        <h4>🗄️ Vector Index (FAISS)</h4>
+        <p><code>data/faiss_index/{user_id}/</code> — Per-user embedding index. Rebuilt automatically on each new document upload. Shared infrastructure, isolated data.</p>
+      </div>
+      <div class="info-card">
+        <h4>💬 Conversation Memory</h4>
+        <p><code>data/databases/{user_id}/conversation.db</code> — SQLite file storing all message turns per session. Used to inject history into every planner call.</p>
+      </div>
+      <div class="info-card">
+        <h4>💻 Sandbox Workspace</h4>
+        <p><code>data/workspace/{user_id}/</code> — Mounted as <code>/workspace</code> inside the Docker container. All files written by the Code Agent land here, scoped to the user.</p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- 11. EDTECH SUITE DEEP-DIVE                                   -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="edtech">
+    <div class="section-header">
+      <div class="section-num">11</div>
+      <div class="section-meta">
+        <h2>EdTech Studio Suite — 11 Specialized Sub-Agents</h2>
+        <p>A complete autonomous AI executive assistant for K-12 educators. All agents support PDF export via ReportLab and live Google Workspace integration (Docs, Sheets, Calendar).</p>
+      </div>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-card-header">
+        <div class="dot-group">
+          <span style="background:#f43f5e"></span>
+          <span style="background:#f59e0b"></span>
+          <span style="background:#10b981"></span>
+        </div>
+        <div class="diagram-label">backend/agents/edtech_agent.py · 11-agent sub-orchestrator</div>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph TB
+    User(["🎓 Teacher / Educator"])
+    Planner{"JARVIS Planner LLM"}
+    EdTech["EdTech Agent
+Sub-Orchestrator"]
+
+    User --> Planner
+    Planner -->|"Delegates to"| EdTech
+
+    subgraph Curriculum["📚 Curriculum & Assessment"]
+        L1["ncert_lesson_architect
+Period-by-period NCERT lesson plans
+→ PDF + Google Doc"]
+        L2["cbse_exam_generator
+MCQ + Short + Long Answer papers
+with answer keys → PDF"]
+        L3["cce_report_card_architect
+CCE-format student report cards
+→ Google Sheets gradebook"]
+    end
+
+    subgraph Teaching["👨‍🏫 Teaching & Tutoring"]
+        T1["hinglish_socratic_tutor
+Step-by-step Socratic guidance
+in Hinglish (Hindi-English)"]
+        T2["teacher_executive_assistant
+Lesson summaries · Parent emails
+Meeting agendas"]
+        T3["document_exam_scanner
+Multimodal OCR of exam PDFs
+Llama 4 Scout vision model"]
+    end
+
+    subgraph Admin["📋 School Administration"]
+        A1["sheets_gradebook_agent
+Live Google Sheets gradebooks
+Auto-grading formulas"]
+        A2["calendar_scheduler_agent
+PTM scheduling · Exam reminders
+Academic milestones → Google Calendar"]
+        A3["notes_manager_agent
+Organize + search lecture notes
+Revision material management"]
+        A4["whatsapp_notice_curator
+Parent broadcast messages
+for WhatsApp / SMS"]
+    end
+
+    subgraph Exports["📤 Export Integrations"]
+        E1["ReportLab PDF Generator
+Downloadable PDF links"]
+        E2["Google Docs API
+Live collaborative documents"]
+        E3["Google Sheets API
+Live gradebooks with formulas"]
+        E4["Google Calendar API
+Event creation + scheduling"]
+    end
+
+    EdTech --> Curriculum
+    EdTech --> Teaching
+    EdTech --> Admin
+
+    L1 --> E1
+    L1 --> E2
+    L2 --> E1
+    L3 --> E3
+    A1 --> E3
+    A2 --> E4
+
+    classDef sub fill:#0f172a,stroke:#10b981,stroke-width:1px,color:#e2e8f0
+    classDef export fill:#0f172a,stroke:#f59e0b,stroke-width:1px,stroke-dasharray:4 4,color:#94a3b8
+    classDef orch fill:#0f172a,stroke:#7c3aed,stroke-width:2px,color:#e2e8f0
+
+    class L1,L2,L3,T1,T2,T3,A1,A2,A3,A4 sub
+    class E1,E2,E3,E4 export
+    class EdTech orch
+        </div>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="info-card">
+        <h4>🇮🇳 NCERT/CBSE Aligned</h4>
+        <p>Lesson plans and exam papers are structured around India's NCERT curriculum and CBSE Board exam patterns — including Assertion-Reason, Case-Study, and Competency-Based Questions.</p>
+      </div>
+      <div class="info-card">
+        <h4>📄 PDF Export</h4>
+        <p>Every document agent produces a downloadable PDF link via <code>ReportLab</code>. The link is preserved verbatim in the final synthesizer response, never hallucinated away.</p>
+      </div>
+      <div class="info-card">
+        <h4>🌐 Live Google Workspace</h4>
+        <p>Agents use Google OAuth2 to create live documents in the teacher's own Drive account — so lesson plans, gradebooks, and PTM schedules are always editable and shareable.</p>
+      </div>
+      <div class="info-card">
+        <h4>👁️ Multimodal Vision</h4>
+        <p><code>document_exam_scanner</code> uses <code>meta-llama/llama-4-scout-17b-16e-instruct</code> to read handwritten exam PDFs and extract structured student answers — no OCR library needed.</p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- 12. TECH STACK VISUAL SUMMARY                                -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <section class="diagram-section" id="stack">
+    <div class="section-header">
+      <div class="section-num">12</div>
+      <div class="section-meta">
+        <h2>Full Tech Stack &amp; Dependency Map</h2>
+        <p>Complete technology dependency graph — from the React UI down through FastAPI, LangChain, Groq, and all external service integrations.</p>
+      </div>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-card-header">
+        <div class="dot-group">
+          <span style="background:#f43f5e"></span>
+          <span style="background:#f59e0b"></span>
+          <span style="background:#10b981"></span>
+        </div>
+        <div class="diagram-label">requirements.txt + package.json · Full dependency graph</div>
+      </div>
+      <div class="diagram-body">
+        <div class="mermaid">
+graph LR
+    subgraph FrontendStack["Frontend — React + Vite"]
+        React["React 18"]
+        Vite["Vite 5"]
+        Recharts["Recharts
+Data Charts"]
+        SupaJS["@supabase/supabase-js
+Auth client"]
+        CSS["Vanilla CSS
+Glassmorphism + SSE animations"]
+    end
+
+    subgraph BackendStack["Backend — Python 3.10+"]
+        FastAPI["FastAPI + Uvicorn
+ASGI + SSE"]
+        LC["LangChain 0.3+
+Orchestration framework"]
+        LCC["langchain-core
+langchain-community"]
+        LC --> LCC
+    end
+
+    subgraph LLMStack["LLM Layer — Groq"]
+        Groq["Groq API
+llama-3.3-70b-versatile"]
+        Scout["Groq API
+meta-llama/llama-4-scout-17b
+Multimodal vision"]
+    end
+
+    subgraph VectorStack["Vector &amp; Search"]
+        FAISS["FAISS
+Per-user vector store"]
+        HF["sentence-transformers
+all-MiniLM-L6-v2"]
+        BM25["rank-bm25
+Keyword search"]
+        Cohere["Cohere Reranker
+Cross-encoder"]
+    end
+
+    subgraph SandboxStack["Execution Sandbox"]
+        E2B["e2b-code-interpreter
+Cloud VM"]
+        Docker["Docker SDK
+Local container"]
+        Sub["subprocess
+Host fallback"]
+    end
+
+    subgraph StorageStack["Storage — Per-User"]
+        SQLite["SQLite
+Conversation memory"]
+        FileSystem["Local File System
+documents · workspace · images"]
+    end
+
+    subgraph ExternalAPIs["External APIs"]
+        Tavily["Tavily
+Web search"]
+        Supabase["Supabase
+JWT Auth"]
+        GoogleWS["Google OAuth2
+Drive · Docs · Sheets · Calendar"]
+        Gmail["Gmail IMAP/SMTP"]
+        YFinance["yfinance
+Stock data"]
+        Geopy["Geopy + Folium
+Maps"]
+        Slack["Slack Webhooks"]
+        ReportLab["ReportLab
+PDF generation"]
+    end
+
+    React --> FastAPI
+    Vite --> React
+    SupaJS --> Supabase
+    FastAPI --> LC
+    LC --> Groq
+    LC --> Scout
+    LC --> FAISS
+    FAISS --> HF
+    FAISS --> BM25
+    FAISS --> Cohere
+    FastAPI --> E2B
+    FastAPI --> Docker
+    FastAPI --> Sub
+    FastAPI --> SQLite
+    FastAPI --> FileSystem
+    FastAPI --> Tavily
+    FastAPI --> GoogleWS
+    FastAPI --> Gmail
+    FastAPI --> YFinance
+    FastAPI --> Geopy
+    FastAPI --> Slack
+    FastAPI --> ReportLab
+
+    classDef fe fill:#0f172a,stroke:#38bdf8,stroke-width:1px,color:#e2e8f0
+    classDef be fill:#0f172a,stroke:#00d4ff,stroke-width:1px,color:#e2e8f0
+    classDef llm fill:#0f172a,stroke:#7c3aed,stroke-width:2px,color:#e2e8f0
+    classDef vec fill:#0f172a,stroke:#10b981,stroke-width:1px,color:#e2e8f0
+    classDef sb fill:#0f172a,stroke:#f43f5e,stroke-width:1px,color:#e2e8f0
+    classDef ext fill:#0f172a,stroke:#f59e0b,stroke-width:1px,stroke-dasharray:4 4,color:#94a3b8
+
+    class React,Vite,Recharts,SupaJS,CSS fe
+    class FastAPI,LC,LCC be
+    class Groq,Scout llm
+    class FAISS,HF,BM25,Cohere vec
+    class E2B,Docker,Sub sb
+    class Tavily,Supabase,GoogleWS,Gmail,YFinance,Geopy,Slack,ReportLab ext
+        </div>
+      </div>
+    </div>
+
+    <!-- Stack table -->
+    <div class="agent-table-wrap" style="margin-top:24px;">
+      <table>
+        <thead>
+          <tr><th>Layer</th><th>Technology</th><th>Version / Detail</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Frontend</td><td>React</td><td>18.x</td><td>UI framework — streaming SSE consumer, chat, agent cards</td></tr>
+          <tr><td>Frontend</td><td>Vite</td><td>5.x</td><td>Build tool &amp; dev server — proxies <code>/api</code> to FastAPI</td></tr>
+          <tr><td>Frontend</td><td>Recharts</td><td>2.x</td><td>Interactive charts rendered inside chat message bubbles</td></tr>
+          <tr><td>Backend</td><td>FastAPI</td><td>0.110+</td><td>ASGI framework — REST + SSE <code>StreamingResponse</code></td></tr>
+          <tr><td>Backend</td><td>Uvicorn</td><td>0.29+</td><td>ASGI server (with <code>--reload</code> for dev)</td></tr>
+          <tr><td>AI Orchestration</td><td>LangChain</td><td>0.3+</td><td>Agent framework — tools, prompts, chains, memory</td></tr>
+          <tr><td>LLM</td><td>Groq <code>llama-3.3-70b-versatile</code></td><td>—</td><td>Planner, Synthesizer, and most agent reasoning</td></tr>
+          <tr><td>LLM</td><td>Groq <code>llama-4-scout-17b</code></td><td>—</td><td>Multimodal vision — image &amp; PDF parsing in Analyse Agent</td></tr>
+          <tr><td>Vector DB</td><td>FAISS</td><td>1.7+</td><td>Per-user local vector index for RAG</td></tr>
+          <tr><td>Embeddings</td><td>Sentence-Transformers</td><td>all-MiniLM-L6-v2</td><td>Text chunk embedding for FAISS indexing</td></tr>
+          <tr><td>Hybrid Search</td><td>rank-bm25</td><td>0.2+</td><td>Keyword (BM25) retrieval merged with FAISS semantic results</td></tr>
+          <tr><td>Reranking</td><td>Cohere API</td><td>—</td><td>Cross-encoder reranking of merged RAG candidates</td></tr>
+          <tr><td>Sandbox T1</td><td>e2b-code-interpreter</td><td>2.8+</td><td>Remote cloud VM — isolated Python 3.13 execution</td></tr>
+          <tr><td>Sandbox T2</td><td>Docker SDK</td><td>—</td><td>Local container — <code>jarvis-sandbox</code> image, /workspace mount</td></tr>
+          <tr><td>Auth</td><td>Supabase</td><td>—</td><td>JWT sign-up / sign-in / token verification</td></tr>
+          <tr><td>Search</td><td>Tavily API</td><td>—</td><td>Real-time web search with structured results</td></tr>
+          <tr><td>Google</td><td>OAuth2 — Drive/Docs/Sheets/Calendar</td><td>—</td><td>Live document creation and calendar scheduling</td></tr>
+          <tr><td>Finance</td><td>yfinance</td><td>0.2+</td><td>Stock prices, historical OHLCV data, company fundamentals</td></tr>
+          <tr><td>Maps</td><td>Geopy + Folium</td><td>—</td><td>Geocoding, routing, HTML map rendering</td></tr>
+          <tr><td>PDF</td><td>ReportLab</td><td>4.x</td><td>Programmatic PDF generation for EdTech and Finance agents</td></tr>
+          <tr><td>Storage</td><td>SQLite</td><td>—</td><td>Per-user conversation memory and profile configs</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>Built with <strong>LangChain</strong> · <strong>Groq</strong> · <strong>FastAPI</strong> · <strong>React</strong> · <strong>Supabase</strong> · <strong>E2B</strong><br>
+  Diagrams rendered with <strong>Mermaid.js</strong> · Right-click any diagram to save as image</p>
+</footer>
+
+<script>
+  // Nav: scroll to section by ID
+  function scrollTo(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // Nav: highlight active section on scroll
+  document.addEventListener('DOMContentLoaded', () => {
+    const sections = Array.from(document.querySelectorAll('.diagram-section'));
+    const navBtns  = Array.from(document.querySelectorAll('.nav-btn'));
+
+    // Map section IDs to nav buttons
+    const idToBtn = {};
+    navBtns.forEach(btn => {
+      const onclickVal = btn.getAttribute('onclick') || '';
+      const match = onclickVal.match(/scrollTo\('([^']+)'\)/);
+      if (match) idToBtn[match[1]] = btn;
+    });
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          navBtns.forEach(b => b.classList.remove('active'));
+          const activeBtn = idToBtn[e.target.id];
+          if (activeBtn) activeBtn.classList.add('active');
+        }
+      });
+    }, { threshold: 0.2, rootMargin: '-80px 0px -60% 0px' });
+
+    sections.forEach(s => observer.observe(s));
+  });
+</script>
+
+</body>
+</html>

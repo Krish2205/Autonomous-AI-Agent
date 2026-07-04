@@ -378,7 +378,6 @@ export default function App() {
     // Auto-create conversation if none active
     if (!convId) {
       convId = createNewChat();
-      // Need to wait for state to settle
       await new Promise(resolve => setTimeout(resolve, 0));
     }
 
@@ -389,7 +388,6 @@ export default function App() {
       timestamp: new Date().toISOString(),
     };
 
-    // Add user message and update title
     setConversations(prev => prev.map(c => {
       if (c.id === convId) {
         const isFirstMessage = c.messages.length === 0;
@@ -403,16 +401,33 @@ export default function App() {
       return c;
     }));
 
-    // Set active if needed (for auto-created chats)
     setActiveConversationId(convId);
     setIsLoading(true);
 
+    // Placeholder streaming message
+    const streamingMsgId = generateId();
+    const streamingMessage = {
+      id: streamingMsgId,
+      role: 'jarvis',
+      content: '',
+      agentsUsed: [],
+      timestamp: new Date().toISOString(),
+      isStreaming: true,
+    };
+
+    setConversations(prev => prev.map(c => {
+      if (c.id === convId) {
+        return { ...c, messages: [...c.messages, streamingMessage] };
+      }
+      return c;
+    }));
+
     try {
-      const response = await fetch('/api/query', {
+      const response = await fetch('/api/query/stream', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionToken}`
+          'Authorization': `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({ query, session_id: convId }),
       });
@@ -422,46 +437,96 @@ export default function App() {
         throw new Error(errorData?.detail || `Server error (${response.status})`);
       }
 
-      const data = await response.json();
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullContent = '';
+      let agentsUsed = [];
 
-      const jarvisMessage = {
-        id: generateId(),
-        role: 'jarvis',
-        content: data.response || 'No response received.',
-        agentsUsed: data.agents_used || [],
-        timestamp: new Date().toISOString(),
+      const updateStreamingMsg = (content, agents, step, done) => {
+        setConversations(prev => prev.map(c => {
+          if (c.id !== convId) return c;
+          return {
+            ...c,
+            messages: c.messages.map(m => {
+              if (m.id !== streamingMsgId) return m;
+              return {
+                ...m,
+                content: content,
+                agentsUsed: agents,
+                currentStep: step || null,
+                isStreaming: !done,
+              };
+            }),
+          };
+        }));
       };
 
-      setConversations(prev => prev.map(c => {
-        if (c.id === convId) {
-          return { ...c, messages: [...c.messages, jarvisMessage] };
-        }
-        return c;
-      }));
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      if (data.needs_builder_confirmation) {
-        setPendingBuilder({ query, session_id: convId });
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep incomplete last line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+
+          let event;
+          try { event = JSON.parse(raw); } catch { continue; }
+
+          if (event.type === 'step_start') {
+            setCurrentStep({ agent: event.agent, thought: event.thought, step: event.step });
+            updateStreamingMsg(fullContent, agentsUsed, `Running ${event.agent}...`, false);
+
+          } else if (event.type === 'agent_result') {
+            agentsUsed = [...new Set([...agentsUsed, event.agent])];
+
+          } else if (event.type === 'synthesis_chunk') {
+            fullContent += event.chunk;
+            updateStreamingMsg(fullContent, agentsUsed, null, false);
+
+          } else if (event.type === 'done') {
+            agentsUsed = event.agents_used || agentsUsed;
+            updateStreamingMsg(fullContent, agentsUsed, null, true);
+
+          } else if (event.type === 'needs_confirmation') {
+            updateStreamingMsg(event.message, agentsUsed, null, true);
+            setPendingBuilder({ query, session_id: convId });
+
+          } else if (event.type === 'error') {
+            fullContent = `**Error:** ${event.detail}`;
+            updateStreamingMsg(fullContent, agentsUsed, null, true);
+
+          } else if (event.type === 'stream_end') {
+            // Final clean-up: mark done
+            updateStreamingMsg(fullContent || 'No response received.', agentsUsed, null, true);
+          }
+        }
       }
 
     } catch (error) {
-      const errorMessage = {
-        id: generateId(),
-        role: 'jarvis',
-        content: `**Error:** ${error.message}\n\nMake sure the backend is running:\n\`\`\`bash\nuvicorn backend.api.server:app --reload --port 8000\n\`\`\``,
-        timestamp: new Date().toISOString(),
-      };
-
+      const errContent = `**Error:** ${error.message}\n\nMake sure the backend is running:\n\`\`\`bash\nuvicorn backend.api.server:app --reload --port 8000\n\`\`\``;
       setConversations(prev => prev.map(c => {
-        if (c.id === convId) {
-          return { ...c, messages: [...c.messages, errorMessage] };
-        }
-        return c;
+        if (c.id !== convId) return c;
+        return {
+          ...c,
+          messages: c.messages.map(m =>
+            m.id === streamingMsgId
+              ? { ...m, content: errContent, isStreaming: false }
+              : m
+          ),
+        };
       }));
     } finally {
       setIsLoading(false);
       setCurrentStep(null);
     }
   }, [activeConversationId, createNewChat, sessionToken]);
+
 
   const handleConfirmBuild = async (shouldBuild) => {
     if (!pendingBuilder) return;
@@ -789,9 +854,12 @@ export default function App() {
                           timestamp={msg.timestamp}
                           sessionToken={sessionToken}
                           onSelectArtifact={setActiveArtifact}
+                          isStreaming={msg.isStreaming || false}
+                          currentStep={msg.currentStep || null}
                         />
                       ))}
-                      {isLoading && <TypingIndicator currentStep={currentStep} />}
+                      {/* TypingIndicator is replaced by the streaming message bubble */}
+                      {isLoading && !messages.some(m => m.isStreaming) && <TypingIndicator currentStep={currentStep} />}
                       <div ref={messagesEndRef} />
                     </div>
                   )}
