@@ -638,7 +638,7 @@ function InteractiveChart({ spec }) {
   );
 }
 
-export default function ChatMessage({ role, content, timestamp, sessionToken, onSelectArtifact }) {
+export default function ChatMessage({ role, content, timestamp, sessionToken, onSelectArtifact, isStreaming, currentStep }) {
   const isUser = role === 'user';
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -689,7 +689,46 @@ export default function ChatMessage({ role, content, timestamp, sessionToken, on
       </div>
       <div>
         <div className="message-content" style={{ position: 'relative', paddingRight: !isUser ? '40px' : undefined }}>
+          {/* Streaming step pill */}
+          {!isUser && isStreaming && currentStep && (
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              marginBottom: '10px',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              background: 'rgba(124, 58, 237, 0.15)',
+              border: '1px solid rgba(124, 58, 237, 0.3)',
+              fontSize: '0.72rem',
+              color: '#a78bfa',
+              fontWeight: 600,
+              letterSpacing: '0.02em',
+            }}>
+              <span style={{
+                width: '6px', height: '6px', borderRadius: '50%',
+                background: '#7c3aed',
+                animation: 'pulse 1s infinite',
+                display: 'inline-block',
+              }} />
+              {currentStep}
+            </div>
+          )}
+
           {parseMarkdown(content, sessionToken, onSelectArtifact)}
+
+          {/* Blinking cursor while streaming */}
+          {!isUser && isStreaming && !currentStep && (
+            <span style={{
+              display: 'inline-block',
+              width: '2px',
+              height: '1em',
+              background: '#00d4ff',
+              marginLeft: '2px',
+              verticalAlign: 'middle',
+              animation: 'stream-blink 0.7s step-end infinite',
+            }} />
+          )}
 
           {!isUser && (
             <button

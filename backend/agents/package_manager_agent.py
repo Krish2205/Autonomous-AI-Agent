@@ -1,6 +1,7 @@
 """
 JARVIS — Package Manager Agent
-Manages dependencies and environments (pip, npm) using secure containerized Docker sandboxes.
+Manages dependencies and environments (pip, npm) using the multi-tier execution sandbox
+(E2B Cloud → Local Docker → Host Subprocess fallback).
 """
 
 import os
@@ -18,7 +19,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from backend.agents.base import BaseAgent
 from backend.config import PROJECT_ROOT, llm, current_user_id
-from backend.core.sandbox import DockerSandboxManager
+from backend.core.sandbox import ExecutionSandbox
 from backend.logger import get_logger
 
 logger = get_logger("agents.package_manager")
@@ -91,13 +92,14 @@ def list_dependencies(ecosystem: Literal["python", "node"], project_path: str) -
         else:
             try:
                 user_id = current_user_id.get() or "default"
-                sandbox = DockerSandboxManager(user_id)
-                res = sandbox.execute(["pip", "list"])
+                sandbox = ExecutionSandbox(user_id)
+                res = sandbox.execute_command(["pip", "list"])
                 output = f"Installed python packages:\n{res['stdout']}"
                 if res["stderr"]:
                     output += f"\nStderr:\n{res['stderr']}"
                 if not res["sandboxed"]:
-                    output += "\n[Note: Executed in host fallback environment]"
+                    output += f"\n[Note: Executed via {res['tier']}]"
+                sandbox.cleanup()
                 return output
             except Exception as ex:
                 return f"Failed to list python packages: {str(ex)}"
@@ -144,18 +146,18 @@ def install_dependency(ecosystem: Literal["python", "node"], package_name: str, 
     logger.info(f"Executing package installation: {cmd}")
     try:
         user_id = current_user_id.get() or "default"
-        sandbox = DockerSandboxManager(user_id)
-        res = sandbox.execute(cmd)
+        sandbox = ExecutionSandbox(user_id)
+        res = sandbox.execute_command(cmd)
         
-        output = f"Package '{package_name}' installation completed.\n"
+        output = f"Package '{package_name}' installation completed via {res.get('tier','unknown')}.\n"
         if res["stdout"]:
             output += f"Stdout:\n{res['stdout']}\n"
         if res["stderr"]:
             output += f"Stderr:\n{res['stderr']}\n"
         output += f"Exit Code: {res['exit_code']}\n"
         if not res["sandboxed"]:
-            output += "[Note: Executed in host fallback environment]\n"
-            
+            output += f"[Note: Executed via {res['tier']} — no isolation]\n"
+        sandbox.cleanup()
         return output
     except Exception as ex:
         return f"Error executing installation: {str(ex)}"
@@ -185,18 +187,18 @@ def uninstall_dependency(ecosystem: Literal["python", "node"], package_name: str
     logger.info(f"Executing package uninstallation: {cmd}")
     try:
         user_id = current_user_id.get() or "default"
-        sandbox = DockerSandboxManager(user_id)
-        res = sandbox.execute(cmd)
+        sandbox = ExecutionSandbox(user_id)
+        res = sandbox.execute_command(cmd)
         
-        output = f"Package '{package_name}' uninstallation completed.\n"
+        output = f"Package '{package_name}' uninstallation completed via {res.get('tier','unknown')}.\n"
         if res["stdout"]:
             output += f"Stdout:\n{res['stdout']}\n"
         if res["stderr"]:
             output += f"Stderr:\n{res['stderr']}\n"
         output += f"Exit Code: {res['exit_code']}\n"
         if not res["sandboxed"]:
-            output += "[Note: Executed in host fallback environment]\n"
-            
+            output += f"[Note: Executed via {res['tier']} — no isolation]\n"
+        sandbox.cleanup()
         return output
     except Exception as ex:
         return f"Error executing uninstallation: {str(ex)}"

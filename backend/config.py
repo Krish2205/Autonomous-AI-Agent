@@ -190,6 +190,22 @@ def save_profile_config(user_id: str, config: dict) -> None:
 
 def load_enabled_agents(user_id: str) -> list[str]:
     """Load the list of enabled agent names for the specified user."""
+    if not user_id:
+        user_id = "default"
+
+    # 1. Attempt to load from user profile configs database
+    try:
+        config = load_profile_config(user_id)
+        if config and "enabled_agents" in config and config["enabled_agents"]:
+            return config["enabled_agents"]
+    except Exception as e:
+        config_logger.warning(f"Failed to load enabled agents from user config: {e}")
+
+    # 2. Check if user_id matches a preset role in DEFAULT_ROLE_AGENTS
+    if user_id in DEFAULT_ROLE_AGENTS:
+        return DEFAULT_ROLE_AGENTS[user_id]
+
+    # 3. Fallback: load all discovered agents
     try:
         from backend.agents import ALL_AGENTS
         names = []
@@ -201,8 +217,9 @@ def load_enabled_agents(user_id: str) -> list[str]:
     except Exception as e:
         config_logger.warning(f"Failed dynamic load of all agents in load_enabled_agents: {e}")
 
-    # Fallback list of agents
+    # Final hardcoded fallback
     return ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "lesson_architect", "exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse", "code", "devops", "cloud_infra", "github_workflow"]
+
 
 def save_enabled_agents(user_id: str, enabled_agents: list[str]) -> None:
     """Save the list of enabled agent names for the specified user."""
