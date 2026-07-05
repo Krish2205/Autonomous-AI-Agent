@@ -1559,7 +1559,7 @@ Event creation + scheduling"]
       <div class="section-num">12</div>
       <div class="section-meta">
         <h2>Full Tech Stack &amp; Dependency Map</h2>
-        <p>Complete technology dependency graph — from the React UI down through FastAPI, LangChain, Groq, and all external service integrations.</p>
+        <p>Complete technology dependency graph — from the React UI down through FastAPI, LangChain, HuggingFace, and all external service integrations.</p>
       </div>
     </div>
     <div class="diagram-card">
@@ -1616,16 +1616,18 @@ Cross-encoder"]
 
     subgraph SandboxStack["Execution Sandbox"]
         E2B["e2b-code-interpreter
-Cloud VM"]
+        Cloud VM"]
         Docker["Docker SDK
-Local container"]
+        Local container"]
         Sub["subprocess
-Host fallback"]
+        Host fallback"]
+        Polyglot["Polyglot Sandbox
+        C/C++, Rust, Go, TypeScript, Java"]
     end
 
-    subgraph StorageStack["Storage — Per-User"]
-        SQLite["SQLite
-Conversation memory"]
+    subgraph StorageStack["Storage"]
+        Postgres["PostgreSQL / SQLite
+        SQLAlchemy Async ORM"]
         FileSystem["Local File System
 documents · workspace · images"]
     end
@@ -1707,14 +1709,14 @@ PDF generation"]
           <tr><td>Hybrid Search</td><td>rank-bm25</td><td>0.2+</td><td>Keyword (BM25) retrieval merged with FAISS semantic results</td></tr>
           <tr><td>Reranking</td><td>Cohere API</td><td>—</td><td>Cross-encoder reranking of merged RAG candidates</td></tr>
           <tr><td>Sandbox T1</td><td>e2b-code-interpreter</td><td>2.8+</td><td>Remote cloud VM — isolated Python 3.13 execution</td></tr>
-          <tr><td>Sandbox T2</td><td>Docker SDK</td><td>—</td><td>Local container — <code>jarvis-sandbox</code> image, /workspace mount</td></tr>
+          <tr><td>Sandbox T2</td><td>Docker SDK / Host Fallback</td><td>—</td><td>Local container / host shell with **polyglot C/C++, Rust, Go, TypeScript, Java** sandboxed execution</td></tr>
           <tr><td>Auth</td><td>Supabase</td><td>—</td><td>JWT sign-up / sign-in / token verification</td></tr>
           <tr><td>Search</td><td>Tavily API</td><td>—</td><td>Real-time web search with structured results</td></tr>
           <tr><td>Google</td><td>OAuth2 — Drive/Docs/Sheets/Calendar</td><td>—</td><td>Live document creation and calendar scheduling</td></tr>
           <tr><td>Finance</td><td>yfinance</td><td>0.2+</td><td>Stock prices, historical OHLCV data, company fundamentals</td></tr>
           <tr><td>Maps</td><td>Geopy + Folium</td><td>—</td><td>Geocoding, routing, HTML map rendering</td></tr>
           <tr><td>PDF</td><td>ReportLab</td><td>4.x</td><td>Programmatic PDF generation for EdTech and Finance agents</td></tr>
-          <tr><td>Storage</td><td>SQLite</td><td>—</td><td>Per-user conversation memory and profile configs</td></tr>
+          <tr><td>Storage</td><td>PostgreSQL / SQLite</td><td>SQLAlchemy Async ORM</td><td>Per-user conversation memory, profile configurations, and RAG vector maps index</td></tr>
         </tbody>
       </table>
     </div>

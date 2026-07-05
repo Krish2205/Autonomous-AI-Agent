@@ -73,9 +73,18 @@ export default function ChatInput({ onSend, onUpload, isLoading, isUploading, sh
     }
   };
 
+  const [aspectRatio, setAspectRatio] = useState('1:1');
+
   const handleSend = () => {
-    const trimmed = input.trim();
+    let trimmed = input.trim();
     if (!trimmed || isLoading || isUploading) return;
+    
+    // Automatically inject aspect ratio flag if generating an image
+    const isImagePrompt = /generate|image|paint|draw|flux/i.test(trimmed);
+    if (isImagePrompt && aspectRatio !== '1:1') {
+      trimmed += ` --ar ${aspectRatio}`;
+    }
+    
     onSend(trimmed);
     setInput('');
     // Reset height
@@ -105,6 +114,8 @@ export default function ChatInput({ onSend, onUpload, isLoading, isUploading, sh
     }
   };
 
+  const isImageQuery = /generate|image|paint|draw|flux/i.test(input);
+
   return (
     <div className="chat-input-area" id="chat-input-area">
       {showSuggestions && (
@@ -122,7 +133,53 @@ export default function ChatInput({ onSend, onUpload, isLoading, isUploading, sh
         </div>
       )}
 
-      <div className="chat-input-wrapper">
+      {/* Aspect Ratio Selector Presets Overlay */}
+      {isImageQuery && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 12px',
+          background: 'rgba(7, 10, 19, 0.6)',
+          border: '1px solid rgba(30, 41, 59, 0.8)',
+          borderBottom: 'none',
+          borderTopLeftRadius: '10px',
+          borderTopRightRadius: '10px',
+          width: 'fit-content',
+          marginLeft: '12px',
+          fontSize: '0.72rem',
+          color: '#94a3b8',
+          fontWeight: 600
+        }}>
+          <span>📐 FLUX Aspect Ratio:</span>
+          {[
+            { id: '1:1', label: 'Square (1:1)' },
+            { id: '16:9', label: 'Landscape (16:9)' },
+            { id: '9:16', label: 'Portrait (9:16)' },
+            { id: '4:3', label: 'Standard (4:3)' }
+          ].map(preset => (
+            <button
+              key={preset.id}
+              onClick={() => setAspectRatio(preset.id)}
+              style={{
+                backgroundColor: aspectRatio === preset.id ? '#0284c7' : 'transparent',
+                color: aspectRatio === preset.id ? '#ffffff' : '#94a3b8',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '2px 8px',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '0.7rem',
+                transition: 'all 0.2s'
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="chat-input-wrapper" style={{ borderTopLeftRadius: isImageQuery ? '0px' : undefined }}>
         <input
           type="file"
           ref={fileInputRef}

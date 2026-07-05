@@ -17,6 +17,7 @@ logger = get_logger("core.analytics")
 current_session_id = contextvars.ContextVar("current_session_id", default="default")
 current_query_id = contextvars.ContextVar("current_query_id", default="")
 current_step_name = contextvars.ContextVar("current_step_name", default="unknown")
+current_stream_queue = contextvars.ContextVar("current_stream_queue", default=None)
 
 # ── Pricing Definitions (per token) ──────────────────────────────────
 MODEL_PRICING = {

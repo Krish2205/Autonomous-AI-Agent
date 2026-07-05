@@ -47,12 +47,18 @@ const PROFILE_MAP = {
     name: 'Developer Suite',
     emoji: '💻',
     title: 'Welcome to Developer Suite Workstation',
-    subtitle: 'Your full-stack autonomous software engineering workstation. Run sandboxed python code, debug terminal logs, and automate DevOps.',
+    subtitle: 'Powered by Vibe-Coding-Claude-Fable-5 (HuggingFace) — your polyglot AI coding workstation. Generate production-ready code in 30+ languages, run sandboxed execution, debug terminal logs, and automate DevOps.',
     chips: [
-      "💻 Write a Python script to process CSV data",
-      "🔍 Search for the latest React documentation",
-      "⚙️ Run terminal diagnostic checks on local server",
-      "📊 Analyze database schema performance"
+      "🐍 Write a Python FastAPI REST endpoint with JWT auth",
+      "⚡ Build a React TypeScript component with hooks & context",
+      "🦀 Write a Rust memory-safe CLI tool with clap",
+      "☕ Create a Java Spring Boot microservice with dependency injection",
+      "🔷 Write a Go HTTP server with goroutines and channels",
+      "🗄️ Generate SQL migrations with indexes and foreign keys",
+      "🐳 Write a production Dockerfile with multi-stage build",
+      "📦 Create a Bash deployment script with error handling",
+      "🔧 Write a Terraform AWS ECS deployment module",
+      "🧪 Generate unit tests with mocks for a JavaScript module"
     ]
   },
   cloud_devops: {
@@ -371,7 +377,7 @@ export default function App() {
   }, []);
 
   // ── Send message ─────────────────────────────────────────────
-  const handleSend = useCallback(async (query) => {
+  const handleSend = useCallback(async (query, isRetry = false, retryMsgId = null) => {
     if (!sessionToken) return;
     let convId = activeConversationId;
 
@@ -381,31 +387,33 @@ export default function App() {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
 
-    const userMessage = {
-      id: generateId(),
-      role: 'user',
-      content: query,
-      timestamp: new Date().toISOString(),
-    };
+    if (!isRetry) {
+      const userMessage = {
+        id: generateId(),
+        role: 'user',
+        content: query,
+        timestamp: new Date().toISOString(),
+      };
 
-    setConversations(prev => prev.map(c => {
-      if (c.id === convId) {
-        const isFirstMessage = c.messages.length === 0;
-        return {
-          ...c,
-          messages: [...c.messages, userMessage],
-          title: isFirstMessage ? truncateTitle(query) : c.title,
-          time: formatTime(new Date()),
-        };
-      }
-      return c;
-    }));
+      setConversations(prev => prev.map(c => {
+        if (c.id === convId) {
+          const isFirstMessage = c.messages.length === 0;
+          return {
+            ...c,
+            messages: [...c.messages, userMessage],
+            title: isFirstMessage ? truncateTitle(query) : c.title,
+            time: formatTime(new Date()),
+          };
+        }
+        return c;
+      }));
+    }
 
     setActiveConversationId(convId);
     setIsLoading(true);
 
-    // Placeholder streaming message
-    const streamingMsgId = generateId();
+    // Placeholder streaming message or update previous failed message
+    const streamingMsgId = retryMsgId || generateId();
     const streamingMessage = {
       id: streamingMsgId,
       role: 'jarvis',
@@ -413,17 +421,56 @@ export default function App() {
       agentsUsed: [],
       timestamp: new Date().toISOString(),
       isStreaming: true,
+      queryRef: query // Store original query string for manual retry triggers
     };
 
-    setConversations(prev => prev.map(c => {
-      if (c.id === convId) {
-        return { ...c, messages: [...c.messages, streamingMessage] };
+    if (!isRetry) {
+      setConversations(prev => prev.map(c => {
+        if (c.id === convId) {
+          return { ...c, messages: [...c.messages, streamingMessage] };
+        }
+        return c;
+      }));
+    } else {
+      setConversations(prev => prev.map(c => {
+        if (c.id === convId) {
+          return {
+            ...c,
+            messages: c.messages.map(m => m.id === retryMsgId ? streamingMessage : m)
+          };
+        }
+        return c;
+      }));
+    }
+
+    // Helper function for fetching stream with backoff retry logic
+    const fetchWithBackoff = async (url, options, maxRetries = 3, initialDelay = 1000) => {
+      let delay = initialDelay;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await fetch(url, options);
+          if (response.ok) return response;
+          
+          // Only retry on transient codes (e.g. 502, 503, 504, 429)
+          if (response.status === 429 || (response.status >= 502 && response.status <= 504)) {
+            if (attempt === maxRetries) throw new Error(`Server returned error (${response.status})`);
+            logger.warn(`Fetch attempt ${attempt} failed with status ${response.status}. Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2; // exponential increase
+            continue;
+          }
+          const errorData = await response.json().catch(() => null);
+          throw new Error(errorData?.detail || `Server error (${response.status})`);
+        } catch (error) {
+          if (attempt === maxRetries) throw error;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+        }
       }
-      return c;
-    }));
+    };
 
     try {
-      const response = await fetch('/api/query/stream', {
+      const response = await fetchWithBackoff('/api/query/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -431,11 +478,6 @@ export default function App() {
         },
         body: JSON.stringify({ query, session_id: convId }),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.detail || `Server error (${response.status})`);
-      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -856,6 +898,14 @@ export default function App() {
                           onSelectArtifact={setActiveArtifact}
                           isStreaming={msg.isStreaming || false}
                           currentStep={msg.currentStep || null}
+                          onRetry={() => {
+                            // Find the query preceding this error message
+                            const prevMessage = idx > 0 ? messages[idx - 1] : null;
+                            const query = prevMessage && prevMessage.role === 'user' ? prevMessage.content : msg.queryRef;
+                            if (query) {
+                              handleSend(query, true, msg.id);
+                            }
+                          }}
                         />
                       ))}
                       {/* TypingIndicator is replaced by the streaming message bubble */}

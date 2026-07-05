@@ -171,19 +171,18 @@ class Orchestrator:
                 logger.info("Planner decided to finish.")
                 break
 
-            # Step 2: Execute agent
-            agent_name = plan_step.target
-            agent_query = plan_step.query
-
-            if not agent_name or not agent_query:
-                logger.warning("Planner action was run_agent but target/query was missing. Finishing.")
+            # Step 2: Execute agents (potentially in parallel)
+            actions = plan_step.actions
+            if not actions:
+                logger.warning("Planner action was run_agents but actions list was empty. Finishing.")
                 break
 
             # Intercept agent_builder to check for confirmation
-            if agent_name == "agent_builder":
+            builder_action = next((act for act in actions if act.target == "agent_builder"), None)
+            if builder_action:
+                agent_query = builder_action.query
                 if confirm_build is None:
                     logger.info("Builder Agent execution detected. Pausing for user confirmation.")
-                    # Return immediate confirmation request response
                     return {
                         "response": f"I need to create a new custom agent with capabilities: **{agent_query}**. Since this is a new agent, it will take about 15-30 seconds to compile, import, and test. Would you like to continue or abort?",
                         "agents_used": list(agents_used),
@@ -200,37 +199,58 @@ class Orchestrator:
                 else:
                     logger.info("User confirmed Builder Agent execution. Proceeding...")
 
-            agents_used.add(agent_name)
-            current_step_name.set(f"agent:{agent_name}")
-            
-            # Broadcast real-time step execution event to client SSE stream
-            try:
-                notification_manager.broadcast({
-                    "event": "step_progress",
-                    "agent": agent_name,
-                    "query": agent_query,
-                    "thought": plan_step.thought,
-                    "step": step_num,
-                    "status": "running"
-                })
-            except Exception as e:
-                logger.warning(f"Failed to broadcast step notification: {e}")
+            # Broadcast execution events
+            for act in actions:
+                agents_used.add(act.target)
+                try:
+                    notification_manager.broadcast({
+                        "event": "step_progress",
+                        "agent": act.target,
+                        "query": act.query,
+                        "thought": plan_step.thought,
+                        "step": step_num,
+                        "status": "running"
+                    })
+                except Exception as e:
+                    logger.warning(f"Failed to broadcast step notification: {e}")
 
-            result = self._execute_task(agent_name, agent_query, chat_history=chat_history)
+            # Execute actions in parallel using ThreadPoolExecutor
+            # Ensure ContextVar values are captured and set in the worker threads
+            user_id = current_user_id.get()
+            session_id = current_session_id.get()
+            query_id = current_query_id.get()
+
+            def _worker(act):
+                current_user_id.set(user_id)
+                current_session_id.set(session_id)
+                current_query_id.set(query_id)
+                current_step_name.set(f"agent:{act.target}")
+                res = self._execute_task(act.target, act.query, chat_history=chat_history)
+                return act.target, act.query, res
+
+            results = []
+            with ThreadPoolExecutor(max_workers=max(1, len(actions))) as executor:
+                futures = [executor.submit(_worker, act) for act in actions]
+                for future in futures:
+                    try:
+                        results.append(future.result())
+                    except Exception as e:
+                        logger.error(f"Error in parallel worker task: {e}")
 
             # Zero-Touch dynamically reload registry if agent_builder was used
-            if agent_name == "agent_builder":
+            if any(target == "agent_builder" for target, _, _ in results):
                 logger.info("Agent Builder ran. Scanning for new agents to register...")
                 self.registry.scan_and_register_agents()
 
-            # Record step
-            steps_taken.append({
-                "step": step_num,
-                "thought": plan_step.thought,
-                "agent": agent_name,
-                "query": agent_query,
-                "result": result
-            })
+            # Record steps taken
+            for target, act_query, res in results:
+                steps_taken.append({
+                    "step": step_num,
+                    "thought": plan_step.thought,
+                    "agent": target,
+                    "query": act_query,
+                    "result": res
+                })
 
         # Synthesize final output based on steps taken
         if steps_taken:

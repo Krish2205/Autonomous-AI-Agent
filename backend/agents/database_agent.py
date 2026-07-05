@@ -25,6 +25,15 @@ def execute_sql(sql_query: str) -> str:
     Returns query result rows formatted as a markdown table, or a success message for write operations.
     """
     logger.info(f"Executing SQL query: {sql_query}")
+    
+    # Input validation / Sanitization against system-level metadata databases
+    forbidden_terms = ["profile_configs", "conversations", "document_chunks", "sqlite_master", "sqlite_sequence", "sqlite_stat"]
+    query_normalized = sql_query.lower()
+    for term in forbidden_terms:
+        if term in query_normalized:
+            logger.warning(f"SQL query rejected: Access to system table '{term}' is forbidden.")
+            return f"Error: SQL query rejected. Access to system table '{term}' is forbidden."
+
     try:
         conn = sqlite3.connect(get_user_database_path())
         cursor = conn.cursor()
