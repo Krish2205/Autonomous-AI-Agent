@@ -2,19 +2,20 @@
 
 <div align="center">
 
-**Production-grade, multi-user AI platform powered by LangChain · Groq · FastAPI · React**
+**Production-grade, multi-user AI platform powered by LangChain · HuggingFace · FastAPI · React**
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![LangChain](https://img.shields.io/badge/LangChain-0.3%2B-1C3C3C?logo=langchain&logoColor=white)](https://langchain.com)
+[![HuggingFace](https://img.shields.io/badge/HuggingFace-Models-orange?logo=huggingface&logoColor=white)](https://huggingface.co)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>
 
 ---
 
-JARVIS is a **production-grade autonomous AI system** that orchestrates 37+ specialized agents to handle complex, multi-step tasks across 12 industry domains — from live code execution in a cloud sandbox to RAG-powered document analysis, Gmail automation, financial intelligence, and EdTech lesson planning.
+JARVIS is a **production-grade autonomous AI system** that orchestrates 37+ specialized agents to handle complex, multi-step tasks across 12 industry domains — from live code execution in a cloud sandbox to RAG-powered document analysis, Gmail automation, financial intelligence, and EdTech lesson planning. Powered entirely by **HuggingFace Inference API** — 8 specialized state-of-the-art models covering every AI task in the system.
 
 Unlike simple chatbot wrappers, JARVIS implements a **real ReAct agentic loop**: the Planner LLM reasons step-by-step, selects the most relevant agent from a self-describing registry, feeds its output forward as context, and repeats until the task is fully complete — then streams the final answer token-by-token to the user.
 
@@ -26,6 +27,7 @@ Unlike simple chatbot wrappers, JARVIS implements a **real ReAct agentic loop**:
 |---|---|
 | **Real Agentic Loop** | Not a RAG wrapper. The Planner reasons, acts, observes, and re-plans iteratively using a persistent scratchpad (ReAct pattern) |
 | **Streaming Responses** | `/api/query/stream` SSE endpoint streams `step_start → agent_result → synthesis_chunk` events. The UI renders tokens as they arrive — identical to ChatGPT |
+| **8 Specialized HF Models** | Qwen3-32B (planner), Qwen3-Coder-480B (code), Qwen2.5-VL-72B (vision), bge-m3 (embeddings), bge-reranker (RAG), Whisper-v3 (STT), Kokoro-82M (TTS), FLUX.1-dev (images) |
 | **Multi-Tier Code Sandbox** | Code runs in E2B Cloud → Local Docker → Host subprocess, auto-detected at runtime with graceful degradation |
 | **37+ Specialized Agents** | Search, Code, RAG, Email, Calendar, SQL, Finance, Maps, EdTech, DevOps, SecOps, Legal, Healthcare, and more |
 | **12 Industry Profiles** | Per-profile agent configurations load curated tool suites for developers, analysts, teachers, security engineers, etc. |
@@ -33,7 +35,7 @@ Unlike simple chatbot wrappers, JARVIS implements a **real ReAct agentic loop**:
 | **Self-Correcting Agents** | Code Agent and Database Agent detect errors (syntax errors, SQL exceptions, missing modules), self-heal, and retry |
 | **Dynamic Agent Builder** | Meta-agent that writes, validates, and hot-registers new Python agents into the running system at runtime |
 | **Google Workspace OAuth** | Full OAuth2 flow for Drive, Docs, Sheets, and Calendar — live gradebook creation, calendar scheduling, PDF export |
-| **Hybrid RAG** | BM25 keyword + FAISS semantic search + Cohere reranking for production-grade document retrieval accuracy |
+| **Hybrid RAG** | BM25 keyword + FAISS semantic search + BAAI/bge-reranker-v2-m3 reranking — multilingual, production-grade retrieval accuracy |
 
 ---
 
@@ -62,7 +64,7 @@ Unlike simple chatbot wrappers, JARVIS implements a **real ReAct agentic loop**:
                             │
              ┌──────────────▼────────────────┐
              │         Planner LLM           │
-             │  (Groq Llama-3.3-70B)        │
+             │  (Qwen3-32B-Instruct · HF)    │
              │  Selects next agent + query   │
              └──────────────┬────────────────┘
                             │
@@ -142,9 +144,9 @@ E2B_API_KEY present?
 | Agent | Description |
 |---|---|
 | `search` | Real-time web search via Tavily API |
-| `code` | Sandboxed Python execution (E2B→Docker→Host), file I/O, self-correction |
-| `analyse` | Hybrid RAG: BM25 + FAISS + Cohere reranking, multimodal vision (Llama 4 Scout) |
-| `summary` | Copywriting, contextual summarization, text formatting |
+| `code` | Sandboxed 30+ language execution (E2B→Docker→Host). Primary: **Qwen3-Coder-480B-A35B** · Fallback: Vibe-Coding-Claude-Fable-5 |
+| `analyse` | Hybrid RAG: BM25 + FAISS + **bge-reranker-v2-m3** reranking; multimodal OCR via **Qwen2.5-VL-72B** |
+| `summary` | Copywriting, contextual summarization — powered by **Qwen3-32B-Instruct** |
 
 ### Services & APIs
 | Agent | Description |
@@ -158,10 +160,10 @@ E2B_API_KEY present?
 ### Media & Extended Capabilities
 | Agent | Description |
 |---|---|
-| `image_gen` | Text-to-image synthesis |
+| `image_gen` | Text-to-image synthesis via **FLUX.1-dev** (HuggingFace) · Pollinations fallback |
 | `finance` | Stock/crypto data, charts, portfolio metrics via yfinance |
-| `voice` | Speech-to-Text (STT) and Text-to-Speech (TTS) |
-| `translation` | Multi-language translation |
+| `voice` | STT via **Whisper-large-v3** · TTS via **Kokoro-82M** (10 voices, HuggingFace) |
+| `translation` | Multi-language translation via Qwen3-32B |
 | `video_to_mp3` | Audio extraction from video files |
 | `visualization` | Matplotlib/Seaborn chart renderer, saved as images |
 
@@ -345,11 +347,17 @@ JARVIS/
 | Layer | Technology |
 |---|---|
 | **Framework** | FastAPI (Python 3.10+), Uvicorn ASGI |
-| **AI Orchestration** | LangChain 0.3+, LangChain-Core, LangChain-Community |
-| **LLM Provider** | Groq (`llama-3.3-70b-versatile`, `meta-llama/llama-4-scout-17b-16e-instruct`) |
-| **Vector DB** | FAISS (local per-user), ChromaDB |
-| **Embeddings** | HuggingFace `all-MiniLM-L6-v2` |
-| **Hybrid Search** | BM25 (`rank_bm25`) + Cohere Reranking |
+| **AI Orchestration** | LangChain 0.3+, LangChain-Core, LangChain-Community, LangChain-OpenAI |
+| **Planner / Chat LLM** | HuggingFace → `Qwen/Qwen3-32B-Instruct` (fallback: Groq llama-3.3-70b) |
+| **Coding LLM** | HuggingFace → `Qwen/Qwen3-Coder-480B-A35B-Instruct` (fallback: Vibe-Coding-Claude-Fable-5) |
+| **Vision / OCR LLM** | HuggingFace → `Qwen/Qwen2.5-VL-72B-Instruct` |
+| **Embeddings** | HuggingFace → `BAAI/bge-m3` (multilingual, via Inference API) |
+| **Reranking** | HuggingFace → `BAAI/bge-reranker-v2-m3` (fallback: Cohere) |
+| **Speech-to-Text** | HuggingFace → `openai/whisper-large-v3` |
+| **Text-to-Speech** | HuggingFace → `hexgrad/Kokoro-82M` (10 voices) |
+| **Image Generation** | HuggingFace → `black-forest-labs/FLUX.1-dev` (fallback: Pollinations.ai) |
+| **Vector DB** | FAISS (local per-user) |
+| **Hybrid Search** | BM25 (`rank_bm25`) + bge-m3 embeddings + bge-reranker reranking |
 | **Code Sandbox** | E2B Code Interpreter → Docker → Host subprocess |
 | **Auth** | Supabase JWT verification |
 | **Streaming** | Server-Sent Events (SSE) via `StreamingResponse` |
@@ -366,14 +374,15 @@ JARVIS/
 ### External APIs
 | Service | Purpose |
 |---|---|
-| **Groq** | Primary LLM inference (all agents + planner + synthesizer) |
+| **HuggingFace Inference API** | Primary AI provider for all 8 model roles (chat, code, vision, embed, rerank, STT, TTS, image) |
+| **Groq** | LLM fallback when `HUGGINGFACE_API_TOKEN` is not set |
 | **Tavily** | Real-time web search |
 | **E2B Code Interpreter** | Remote cloud sandbox for Python execution |
 | **Supabase** | User authentication and JWT verification |
 | **Google OAuth2** | Drive, Docs, Sheets, Calendar integration |
 | **Gmail IMAP/SMTP** | Email read/send |
 | **yfinance** | Stock and cryptocurrency data |
-| **Cohere** | RAG document reranking |
+| **Cohere** | Reranking fallback when HF token is not set |
 | **Geopy + Folium** | Geocoding and interactive maps |
 | **Slack Webhooks** | Outgoing notification channel |
 
@@ -391,7 +400,21 @@ cd JARVIS
 Create a `.env` file in the project root:
 
 ```env
-# ── LLM (Required) ─────────────────────────────────────────────────
+# ── HuggingFace Inference API (Primary AI Provider) ────────────────
+# Get token at: https://huggingface.co/settings/tokens
+HUGGINGFACE_API_TOKEN=hf_your_token_here
+
+# Model assignments (configured automatically in config.py):
+# Planner / Chat   → Qwen/Qwen3-32B-Instruct
+# Coding           → Qwen/Qwen3-Coder-480B-A35B-Instruct
+# Vision / OCR     → Qwen/Qwen2.5-VL-72B-Instruct
+# Embeddings       → BAAI/bge-m3
+# Reranking        → BAAI/bge-reranker-v2-m3
+# Speech-to-Text   → openai/whisper-large-v3
+# Text-to-Speech   → hexgrad/Kokoro-82M
+# Image Generation → black-forest-labs/FLUX.1-dev
+
+# ── Groq (Optional — LLM fallback when HF token is not set) ────────
 GROQ_API_KEY=your_groq_api_key
 
 # ── Web Search (Required for Search Agent) ─────────────────────────
@@ -412,7 +435,7 @@ GMAIL_APP_PASSWORD=your_gmail_app_password
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 
-# ── RAG Reranking (Optional) ────────────────────────────────────────
+# ── Cohere (Optional — RAG reranker fallback) ───────────────────────
 COHERE_API_KEY=your_cohere_api_key
 
 # ── Outgoing Notifications (Optional) ──────────────────────────────
@@ -505,27 +528,22 @@ $env:PYTHONPATH="."; python tests/test_self_correction.py
 
 # macOS/Linux:
 PYTHONPATH=. python tests/test_self_correction.py
-```
-
-### Test Coverage
-| Scenario | What's Validated |
+### Feature | Details |
 |---|---|
-| **Code Agent Self-Correction** | Recovers from `NameError` / `SyntaxError` by patching and re-executing |
-| **Database Agent Self-Correction** | Handles missing tables via auto `CREATE TABLE`, missing columns via `ALTER TABLE` |
-| **Module Installation Loop** | Orchestrator routes `ModuleNotFoundError` → `PackageManagerAgent` → retry execution |
-| **Sandbox Tier Degradation** | E2B failure falls back to Docker, Docker failure falls back to host subprocess |
-
-### Smoke Test the Sandbox
-```bash
-python -c "
-from dotenv import load_dotenv; load_dotenv()
-from backend.core.sandbox import ExecutionSandbox
-sb = ExecutionSandbox('test')
-print('Tier:', sb.get_tier_info())
-print(sb.execute_python('print(1+1)'))
-sb.cleanup()
-"
-```
+| **Real Agentic Loop** | Not a RAG wrapper. The Planner reasons, acts, observes, and re-plans iteratively using a persistent scratchpad (ReAct pattern) |
+| **Streaming Responses** | `/api/query/stream` SSE endpoint streams `step_start → agent_result → synthesis_chunk` events. The UI renders tokens as they arrive — identical to ChatGPT |
+| **8 Specialized HF Models** | Qwen3-32B (planner), Qwen3-Coder-480B (code), Qwen2.5-VL-72B (vision), bge-m3 (embeddings), bge-reranker (RAG), Whisper-v3 (STT), Kokoro-82M (TTS), FLUX.1-dev (images) |
+| **Multi-Tier Code Sandbox** | Code runs in E2B Cloud → Local Docker → Host subprocess, supporting **polyglot sandbox compilation/execution** for C, C++, Rust, Go, TypeScript, Java, Bash, Node.js, PHP, and PowerShell |
+| **LLM Query Caching** | Global **SQLite-backed caching** layer (`databases/langchain_cache.db`) to cache identical LLM queries, saving token quotas and reducing latency |
+| **Security Validation & Filters** | Max query length checks (8k limit), prompt injection policy scanners, audio size limits (25MB), and forbidden system-database filters |
+| **37+ Specialized Agents** | Search, Code, RAG, Email, Calendar, SQL, Finance, Maps, EdTech, DevOps, SecOps, Legal, Healthcare, and more |
+| **12 Industry Profiles** | Per-profile agent configurations load curated tool suites for developers, analysts, teachers, security engineers, etc. |
+| **Multi-User Isolation** | Per-user FAISS indexes, SQL databases, document stores, and profile configs via `contextvars` |
+| **Self-Correcting Agents** | Code Agent and Database Agent detect errors (syntax errors, SQL exceptions, missing modules), self-heal, and retry |
+| **Dynamic Agent Builder** | Meta-agent that writes, validates, and hot-registers new Python agents with **AST sandbox security analysis checks** prior to registration |
+| **Google Workspace OAuth** | Full OAuth2 flow for Drive, Docs, Sheets, and Calendar — live gradebook creation, calendar scheduling, PDF export |
+| **Hybrid RAG** | BM25 keyword + FAISS semantic search + BAAI/bge-reranker-v2-m3 reranking — multilingual, production-grade retrieval accuracy with **incremental FAISS appending and document deletes** |
+| **PostgreSQL Database** | Production-ready **SQLAlchemy async database engine** supporting PostgreSQL (e.g. via Supabase) with fallback to SQLite for local development |
 
 ---
 
@@ -589,7 +607,7 @@ This section gives you **ready-to-use talking points** for every major technical
 > *"The core is a ReAct loop — Reasoning + Acting. The Planner LLM receives the user's query, the conversation history, and a persistent scratchpad. It picks the most relevant agent, runs it, observes the result, updates the scratchpad, and repeats — up to 5 steps. Only then does the Synthesizer LLM stream the final human-readable response. This is fundamentally different from a single LLM call — it's autonomous multi-step problem solving."*
 
 **Technical depth to add if asked:**
-- The Planner runs on `groq/llama-3.3-70b-versatile` — chosen for its 128k context window to hold the full scratchpad
+- The Planner runs on `Qwen/Qwen3-32B-Instruct` via HuggingFace's OpenAI-compatible `/v1/chat/completions` endpoint — falls back to `groq/llama-3.3-70b-versatile` when HF token is not set
 - Each step emits an SSE `step_start` event before executing, so the frontend shows "Running search..." in real time
 - The scratchpad is a formatted string of all `Thought → Action → Observation` triples, injected as context into the next planner call
 
@@ -610,10 +628,10 @@ This section gives you **ready-to-use talking points** for every major technical
 ### 🐳 3. Multi-Tier Sandbox — "How do you safely execute untrusted code?"
 
 **What to say:**
-> *"I built an `ExecutionSandbox` class that auto-detects the best available execution environment at startup. Tier 1 is E2B Cloud — a remote Python 3.13 VM that's completely isolated from the host. If the API key isn't set, it falls back to Tier 2: a local Docker container with a volume-mounted workspace. If Docker isn't running, Tier 3 is a host subprocess with a warning banner injected into the output. Every code execution goes through this class — so users always get the safest environment available."*
+> *"I built an `ExecutionSandbox` class that auto-detects the best available execution environment at startup. Tier 1 is E2B Cloud — a remote Python VM that's completely isolated from the host. If the API key isn't set, it falls back to Tier 2: a local Docker container. If Docker isn't running, Tier 3 is a host subprocess. I added full multilingual compilation and execution supporting C, C++, Rust, Java, Go, TypeScript, PHP, Node.js, Bash, and PowerShell so the agent can execute diverse scripts."*
 
 **Technical depth to add if asked:**
-- The `ExecutionSandbox` exposes a unified API: `execute_python()`, `execute_command()`, `write_file()`, `read_file()` — regardless of tier
+- The `ExecutionSandbox` exposes a unified API: `execute_code()` and `execute_command()` — regardless of tier
 - Self-correction: if the Code Agent gets a `NameError` or `SyntaxError`, it analyzes the traceback, patches the code, and re-runs automatically — before returning to the user
 - `ModuleNotFoundError` triggers a cross-agent correction: the Orchestrator routes to `PackageManagerAgent` to `pip install` the missing package, then resumes execution
 
@@ -622,30 +640,30 @@ This section gives you **ready-to-use talking points** for every major technical
 ### 🔍 4. Hybrid RAG — "How does your document analysis work?"
 
 **What to say:**
-> *"The Analyse Agent uses hybrid retrieval — not just FAISS semantic search. I combine BM25 keyword search with FAISS vector search, merge and deduplicate the candidates, then run them through Cohere's reranking API. This gives much better recall for domain-specific technical queries where semantic search alone misses exact terms. For image documents, I use Llama 4 Scout — a multimodal vision LLM — to extract captions and analysis before indexing."*
+> *"The Analyse Agent uses hybrid retrieval. I combine BM25 keyword search with FAISS vector search, merge and deduplicate the candidates, then rerank with BAAI/bge-reranker-v2-m3 via HuggingFace. The embeddings use BAAI/bge-m3. I also optimized the vector database updates: rather than rebuilding from scratch, it appends chunks incrementally on file uploads and removes them by chunk ID on file deletion."*
 
 **Technical depth to add if asked:**
 - Each user has a completely isolated FAISS index at `data/faiss_index/{user_id}/` — no cross-user data leakage
-- Embeddings use `sentence-transformers/all-MiniLM-L6-v2` — lightweight and fast, runs locally with no API cost
-- Documents are chunked with a `RecursiveCharacterTextSplitter` (512 tokens, 50 overlap) and indexed on upload — the RAG pipeline is always fresh
+- `BAAI/bge-m3` embeddings are fetched via HuggingFace Inference API with query instruction prefix for asymmetric retrieval. Falls back to local HuggingFaceEmbeddings if token not set
+- Documents are chunked with a `RecursiveCharacterTextSplitter` (500 tokens, 75 overlap) and indexed on upload — the RAG pipeline is always fresh
 
 ---
 
 ### 🔐 5. Multi-User Auth & Isolation — "How do you handle multiple users?"
 
 **What to say:**
-> *"Every API request sends a Supabase JWT. FastAPI verifies it against the Supabase `/auth/v1/user` endpoint on every single request. Once verified, I set a `contextvars.ContextVar` called `current_user_id` to the user's UUID. Every downstream function — FAISS index path, SQLite database, document directory, sandbox workspace — calls `current_user_id.get()` to resolve its path. So two users running simultaneous requests never touch the same files."*
+> *"Every API request sends a Supabase JWT. FastAPI verifies it against the Supabase `/auth/v1/user` endpoint on every single request. Once verified, I set a `contextvars.ContextVar` called `current_user_id` to the user's UUID. Every downstream function — FAISS index path, database config, document directory, sandbox workspace — calls `current_user_id.get()` to resolve its path. So two users running simultaneous requests never touch the same files."*
 
 **Technical depth to add if asked:**
 - `contextvars.ContextVar` is the correct tool for async request scoping in Python — it's like thread-locals but works correctly across `async/await` and `asyncio` task boundaries
-- The profile config (`developer`, `analyst`, `edtech_studio`, etc.) is stored per-user as a JSON file and loaded at request time to filter the agent pool — so a Guest user can't accidentally invoke the Agent Builder
+- The profile config (`developer`, `analyst`, `edtech_studio`, etc.) is stored per-user in PostgreSQL and loaded at request time to filter the agent pool
 
 ---
 
 ### 🤖 6. Self-Describing Agent Registry — "How do you add new agents?"
 
 **What to say:**
-> *"The agent registry uses Python's `importlib` to auto-discover every file in `backend/agents/` at startup. Each agent class defines a `name` and `description` string. The Planner LLM reads all descriptions dynamically — so when I drop a new agent file in that folder, the planner immediately knows it exists and can use it. I even built a meta-agent called `agent_builder_agent` that writes new agent Python files, validates the syntax, imports them with `importlib`, and registers them into the live running system — no restart required."*
+> *"The agent registry uses Python's `importlib` to auto-discover every file in `backend/agents/` at startup. Each agent class defines a `name` and `description` string. The Planner LLM reads all descriptions dynamically — so when I drop a new agent file in that folder, the planner immediately knows it exists and can use it. I even built a meta-agent called `agent_builder_agent` that writes new agent Python files, validates them, and registers them. It now has an AST-based static analyzer to reject imports or calls to dangerous operations like eval(), exec(), and os.system()."*
 
 **Technical depth to add if asked:**
 - Each agent extends `BaseAgent` with a single `run(query: str) -> str` method — the contract is dead simple
@@ -681,7 +699,9 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-Built with **LangChain** · **Groq** · **FastAPI** · **React** · **Supabase** · **E2B**
+Built with **LangChain** · **HuggingFace** · **FastAPI** · **React** · **Supabase** · **E2B**
+
+🤖 *8 HuggingFace models · 37+ agents · 12 industry profiles · Real-time SSE streaming*
 
 ⭐ *Star this repo if it helped you land a job in AI/ML engineering*
 

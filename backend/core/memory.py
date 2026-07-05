@@ -15,6 +15,7 @@ class ConversationMemory:
     def __init__(self, session_id: str):
         self.session_id = session_id
         self.messages: List[Dict[str, str]] = []
+        self.history_summary: str = ""
         
         # User scoping for multi-user session files
         from backend.config import current_user_id
@@ -37,22 +38,74 @@ class ConversationMemory:
 
     def add_message(self, role: str, content: str):
         self.messages.append({"role": role, "content": content})
+        self._compress_if_needed()
         self.save()
 
     def get_history(self) -> List[Dict[str, str]]:
         return self.messages
 
-    def get_context_string(self) -> str:
-        """Format the history as a string for inclusion in LLM prompts (sliding window of the last 6 messages)."""
-        formatted = []
-        recent_messages = self.messages[-6:] if len(self.messages) > 6 else self.messages
-        for msg in recent_messages:
+    def _compress_if_needed(self):
+        """Compresses older turns into a running summary once the message count exceeds the threshold (10 messages)."""
+        # We keep the last 10 turns (5 full user-assistant loops)
+        threshold = 10
+        if len(self.messages) <= threshold:
+            return
+
+        # Split into what we keep (recent turns) and what we compress (older turns)
+        to_keep = self.messages[-threshold:]
+        to_compress = self.messages[:-threshold]
+
+        logger.info(f"Compressing {len(to_compress)} older turns into running conversation summary...")
+
+        # Format older turns for LLM input
+        formatted_turns = []
+        for msg in to_compress:
             role = "User" if msg["role"] == "user" else "JARVIS"
-            formatted.append(f"{role}: {msg['content']}")
+            formatted_turns.append(f"{role}: {msg['content']}")
+        turns_text = "\n".join(formatted_turns)
+
+        # Prompt LLM to update summary
+        from backend.config import llm
+        from langchain_core.messages import SystemMessage, HumanMessage
+        
+        system_prompt = (
+            "You are the Memory Consolidation module of JARVIS.\n"
+            "Your task is to take a running summary of the conversation history so far, combined with a new set of older turns, "
+            "and generate a single, highly cohesive, concise paragraph summarizing the entire conversation so far.\n"
+            "Focus only on key factual information, goals, user instructions, and accomplished tasks. Avoid conversational filler."
+        )
+        
+        user_prompt = f"Current summary:\n{self.history_summary or 'No summary yet.'}\n\nOlder turns to add to summary:\n{turns_text}"
+        
+        try:
+            resp = llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ])
+            new_summary = resp.content if hasattr(resp, "content") else str(resp)
+            self.history_summary = new_summary.strip()
+            self.messages = to_keep
+            logger.info("Conversation summary updated successfully.")
+        except Exception as e:
+            logger.error(f"Failed to compress conversation memory summary: {e}")
+
+    def get_context_string(self) -> str:
+        """Format the history as a string including the running summary + the sliding window turns."""
+        formatted = []
+        if self.history_summary:
+            formatted.append(f"[Conversation Summary of older turns]:\n{self.history_summary}\n")
+            
+        if self.messages:
+            formatted.append("[Recent Turns]:")
+            for msg in self.messages:
+                role = "User" if msg["role"] == "user" else "JARVIS"
+                formatted.append(f"{role}: {msg['content']}")
+                
         return "\n".join(formatted)
 
     def clear(self):
         self.messages = []
+        self.history_summary = ""
         try:
             from backend.core.database import get_db_connection
             conn = get_db_connection()
@@ -77,11 +130,14 @@ class ConversationMemory:
             from backend.core.database import get_db_connection
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT messages FROM conversations WHERE session_id = ?", (self.session_id,))
+            cursor.execute("SELECT messages, history_summary FROM conversations WHERE session_id = ?", (self.session_id,))
             row = cursor.fetchone()
             conn.close()
-            if row and row["messages"]:
-                self.messages = json.loads(row["messages"])
+            if row:
+                if row["messages"]:
+                    self.messages = json.loads(row["messages"])
+                if "history_summary" in row.keys() and row["history_summary"]:
+                    self.history_summary = row["history_summary"]
                 logger.info(f"Loaded memory from DB for session: {self.session_id}")
                 return
         except Exception as e:
@@ -112,13 +168,14 @@ class ConversationMemory:
                     title = first_user_msg[:60] + "..." if len(first_user_msg) > 60 else first_user_msg
             
             cursor.execute("""
-            INSERT INTO conversations (session_id, user_id, title, messages, updated_at)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO conversations (session_id, user_id, title, messages, history_summary, updated_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(session_id) DO UPDATE SET
                 messages = excluded.messages,
                 title = excluded.title,
+                history_summary = excluded.history_summary,
                 updated_at = CURRENT_TIMESTAMP
-            """, (self.session_id, self.user_id, title, messages_json))
+            """, (self.session_id, self.user_id, title, messages_json, self.history_summary))
             conn.commit()
             conn.close()
         except Exception as e:

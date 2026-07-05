@@ -118,12 +118,59 @@ def create_agent_file(agent_name: str, code: str) -> str:
     agents_dir = os.path.join(PROJECT_ROOT, "backend", "agents")
     target_path = os.path.join(agents_dir, filename)
     
-    # 1. Syntax Check
+    # 1. Syntax Check & Static Analysis Sandbox Guard
+    import ast
     try:
-        compile(code, filename, "exec")
+        root = ast.parse(code, filename)
     except SyntaxError as se:
         logger.error(f"Syntax validation failed for {filename}: {se}")
         return f"Syntax Error: The generated python code is invalid:\n{str(se)}"
+
+    # Static Analysis check
+    class SecurityValidator(ast.NodeVisitor):
+        def __init__(self):
+            self.errors = []
+            self.allowed_modules = {
+                "math", "json", "re", "datetime", "time", "random", "collections", "itertools", 
+                "urllib", "urllib.parse", "requests", "bs4", "beautifulsoup4", "sqlite3", 
+                "langchain", "langchain.agents", "langchain_core", "langchain_core.prompts", 
+                "langchain_core.tools", "langchain_core.output_parsers", "langchain_community", 
+                "backend.agents.base", "backend.config", "backend.logger", "typing", "sys", "os"
+            }
+
+        def visit_Import(self, node):
+            for alias in node.names:
+                name = alias.name.split('.')[0]
+                if name not in self.allowed_modules:
+                    self.errors.append(f"Forbidden import: module '{alias.name}' is not in the sandbox allow-list.")
+            self.generic_visit(node)
+
+        def visit_ImportFrom(self, node):
+            if node.module:
+                name = node.module.split('.')[0]
+                if name not in self.allowed_modules:
+                    self.errors.append(f"Forbidden import: from '{node.module}' is not in the sandbox allow-list.")
+            self.generic_visit(node)
+
+        def visit_Call(self, node):
+            # Check for eval, exec, os.system, os.popen, subprocess calls
+            func = node.func
+            if isinstance(func, ast.Name):
+                if func.id in ("eval", "exec"):
+                    self.errors.append(f"Forbidden call: invocation of built-in '{func.id}' is blocked.")
+            elif isinstance(func, ast.Attribute):
+                if isinstance(func.value, ast.Name):
+                    if func.value.id == "os" and func.attr in ("system", "popen", "spawn", "posix_spawn"):
+                        self.errors.append(f"Forbidden call: invocation of 'os.{func.attr}' is blocked.")
+                    elif func.value.id == "subprocess":
+                        self.errors.append("Forbidden call: invocation of 'subprocess' module functions is blocked.")
+            self.generic_visit(node)
+
+    validator = SecurityValidator()
+    validator.visit(root)
+    if validator.errors:
+        logger.warning(f"Security validation rejected {filename}: {validator.errors}")
+        return "Security Validation Error: The generated code violated sandbox policies:\n" + "\n".join(f"- {e}" for e in validator.errors)
         
     # 2. Write to File
     try:

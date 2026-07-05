@@ -86,10 +86,37 @@ export default function Header({ isOnline, agentCount, version, sidebarOpen, onT
         )}
 
         <div className="header-status-badges">
-          {!isOnline && (
-            <div className="status-badge offline">
-              <span className="status-dot" />
-              <span className="badge-text">Offline</span>
+          {isOnline ? (
+            <div className="status-badge online" style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '99px',
+              background: 'rgba(34, 197, 94, 0.1)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              color: '#4ade80',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+            }}>
+              <span className="status-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+              <span className="badge-text">Online</span>
+            </div>
+          ) : (
+            <div className="status-badge offline" style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '99px',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#f87171',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+            }}>
+              <span className="status-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
+              <span className="badge-text">Connection Offline</span>
             </div>
           )}
         </div>

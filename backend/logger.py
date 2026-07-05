@@ -1,10 +1,17 @@
-"""
-JARVIS — Structured Logging
-Color-coded console output with module names.
-"""
-
+import os
+import json
 import logging
 import sys
+from datetime import datetime
+
+
+# ── LangSmith Tracing Automatic Integration ─────────────────────────
+if os.environ.get("LANGCHAIN_TRACING_V2") == "true" or os.environ.get("LANGSMITH_API_KEY"):
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    # Ensure standard tracer names/projects are configured if not explicitly set
+    if not os.environ.get("LANGCHAIN_PROJECT"):
+        os.environ["LANGCHAIN_PROJECT"] = "JARVIS-DevOps-Agents"
+    logging.getLogger("config").info(f"🚀 LangSmith Tracing enabled. Project: {os.environ.get('LANGCHAIN_PROJECT')}")
 
 
 # ── Color Codes ─────────────────────────────────────────────────────
@@ -44,9 +51,39 @@ class ColoredFormatter(logging.Formatter):
         return formatted
 
 
+class JSONFormatter(logging.Formatter):
+    """Custom formatter returning structured JSON payloads for logs aggregation."""
+    def format(self, record):
+        # Extract request context if propagated inside threads
+        from backend.config import current_user_id
+        from backend.core.analytics import current_session_id, current_query_id, current_step_name
+        
+        user_id = current_user_id.get() if current_user_id else None
+        session_id = current_session_id.get() if current_session_id else None
+        query_id = current_query_id.get() if current_query_id else None
+        step_name = current_step_name.get() if current_step_name else None
+
+        log_payload = {
+            "timestamp": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "context": {
+                "user_id": user_id,
+                "session_id": session_id,
+                "query_id": query_id,
+                "step_name": step_name
+            }
+        }
+        if record.exc_info:
+            log_payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_payload)
+
+
 def get_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     """
-    Get a color-coded logger for a module that outputs to stdout and data/jarvis_app.log.
+    Get a color-coded logger for a module that outputs colored logs to stdout
+    and structured JSON logs to data/jarvis_app.json.
 
     Usage:
         from backend.logger import get_logger
@@ -63,20 +100,15 @@ def get_logger(name: str, level: int = logging.INFO) -> logging.Logger:
         console_handler.setFormatter(ColoredFormatter())
         logger.addHandler(console_handler)
         
-        # File Handler
+        # Structured JSON File Handler
         try:
-            import os
             current_dir = os.path.dirname(os.path.abspath(__file__))
             log_dir = os.path.abspath(os.path.join(current_dir, "..", "data"))
             os.makedirs(log_dir, exist_ok=True)
-            log_file = os.path.join(log_dir, "jarvis_app.log")
+            log_file = os.path.join(log_dir, "jarvis_app.json")
             
             file_handler = logging.FileHandler(log_file, encoding="utf-8")
-            file_formatter = logging.Formatter(
-                "%(asctime)s [%(levelname)s] %(name)s -> %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S"
-            )
-            file_handler.setFormatter(file_formatter)
+            file_handler.setFormatter(JSONFormatter())
             logger.addHandler(file_handler)
         except Exception:
             pass

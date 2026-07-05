@@ -638,7 +638,7 @@ function InteractiveChart({ spec }) {
   );
 }
 
-export default function ChatMessage({ role, content, timestamp, sessionToken, onSelectArtifact, isStreaming, currentStep }) {
+export default function ChatMessage({ role, content, timestamp, sessionToken, onSelectArtifact, isStreaming, currentStep, onRetry }) {
   const isUser = role === 'user';
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -682,6 +682,8 @@ export default function ChatMessage({ role, content, timestamp, sessionToken, on
     }
   };
 
+  const isError = content && (content.startsWith('**Error:**') || content.startsWith('Error:'));
+
   return (
     <div className={`message ${isUser ? 'user' : 'jarvis'}`}>
       <div className="message-avatar">
@@ -716,6 +718,34 @@ export default function ChatMessage({ role, content, timestamp, sessionToken, on
           )}
 
           {parseMarkdown(content, sessionToken, onSelectArtifact)}
+
+          {/* Render Retry Button for Error states */}
+          {!isUser && isError && onRetry && (
+            <div style={{ marginTop: '12px' }}>
+              <button
+                onClick={onRetry}
+                style={{
+                  backgroundColor: '#ea580c',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '6px 14px',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  transition: 'all 0.2s',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#c2410c'}
+                onMouseOut={(e) => e.target.style.backgroundColor = '#ea580c'}
+              >
+                🔄 Try again
+              </button>
+            </div>
+          )}
 
           {/* Blinking cursor while streaming */}
           {!isUser && isStreaming && !currentStep && (

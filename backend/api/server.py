@@ -15,6 +15,11 @@ from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi import Request
+
 from backend.config import (
     DOCUMENTS_DIR,
     GENERATED_IMAGES_DIR,
@@ -26,6 +31,9 @@ from backend.config import (
     save_enabled_agents,
     load_profile_config,
     save_profile_config,
+    VIBE_CODING_MODEL_ID,
+    HUGGINGFACE_API_TOKEN,
+    llm,
 )
 
 from backend.core.registry import AgentRegistry, CustomAgentWrapper
@@ -38,11 +46,23 @@ from backend.logger import get_logger
 logger = get_logger("api")
 
 # ── App Setup ───────────────────────────────────────────────────────
+# Define custom rate limiter key to track rate limits per authenticated user when available, falling back to remote IP address.
+def get_user_rate_limit_key(request: Request) -> str:
+    user_id = current_user_id.get()
+    if user_id:
+        return str(user_id)
+    return get_remote_address(request)
+
+limiter = Limiter(key_func=get_user_rate_limit_key)
+
 app = FastAPI(
     title="JARVIS API",
     description="Autonomous AI Operating System — Multi-Agent Orchestrator",
     version="1.0.0",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -391,16 +411,19 @@ async def upload_file(
     except Exception as e:
         logger.warning(f"Could not record file upload to session memory: {e}")
 
-    # Rebuild index on the analyse agent
+    # Update index incrementally on the analyse agent
     try:
         analyse_agent = registry.get("analyse")
-        if analyse_agent and hasattr(analyse_agent, "rebuild_index"):
+        if analyse_agent and hasattr(analyse_agent, "add_document_to_index"):
+            analyse_agent.add_document_to_index(file.filename)
+            logger.info("FAISS vector database index successfully updated incrementally.")
+        elif analyse_agent and hasattr(analyse_agent, "rebuild_index"):
             analyse_agent.rebuild_index()
-            logger.info("FAISS vector database index successfully updated.")
+            logger.info("FAISS vector database index successfully rebuilt.")
         else:
-            logger.warning("Analyse agent not found or does not support rebuild_index.")
+            logger.warning("Analyse agent not found or does not support search index updates.")
     except Exception as e:
-        logger.error(f"Failed to rebuild vector index: {e}")
+        logger.error(f"Failed to update vector index: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"File uploaded, but failed to update search index: {str(e)}"
@@ -509,34 +532,70 @@ def delete_workspace_file(filename: str, current_user: str = Depends(get_current
         logger.error(f"Failed to delete file {safe_filename}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
         
-    # Rebuild search index (only if it was a document from docs_dir)
+    # Incrementally remove document chunks from search index (only if it was a document from docs_dir)
     if not in_generated_images:
         try:
             analyse_agent = registry.get("analyse")
-            if analyse_agent and hasattr(analyse_agent, "rebuild_index"):
+            if analyse_agent and hasattr(analyse_agent, "delete_document_index"):
+                analyse_agent.delete_document_index(safe_filename)
+                logger.info("FAISS vector database index successfully updated incrementally after file deletion.")
+            elif analyse_agent and hasattr(analyse_agent, "rebuild_index"):
                 analyse_agent.rebuild_index()
-                logger.info("FAISS vector database index successfully updated after file deletion.")
+                logger.info("FAISS vector database index successfully rebuilt after file deletion.")
         except Exception as e:
-            logger.warning(f"Could not rebuild search index after file deletion: {e}")
+            logger.warning(f"Could not update search index after file deletion: {e}")
         
     return {"status": "success", "message": f"File '{safe_filename}' deleted successfully."}
 
 
-@app.post("/api/query", response_model=QueryResponse)
-def query(request: QueryRequest, current_user: str = Depends(get_current_user)):
-    """Send a query to the JARVIS orchestrator under user context."""
-    if not request.query.strip():
+def validate_and_sanitize_query(query_str: str) -> str:
+    """Performs length validation, sanitization, and lightweight content policy check."""
+    stripped = query_str.strip()
+    if not stripped:
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
+    
+    # 1. Max query length cap
+    if len(stripped) > 8000:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Query exceeds the maximum allowable length of 8000 characters (Current: {len(stripped)})."
+        )
+        
+    # 2. Lightweight prompt injection / sandbox escape policy check
+    injection_signatures = [
+        "ignore previous instructions",
+        "ignore all previous",
+        "system prompt override",
+        "execute arbitrary",
+        "bypass security",
+    ]
+    query_lower = stripped.lower()
+    for sig in injection_signatures:
+        if sig in query_lower:
+            logger.warning(f"Potential prompt injection detected: '{sig}' found in user query.")
+            raise HTTPException(
+                status_code=400,
+                detail="Security validation failed: Potential prompt injection payload detected."
+            )
+            
+    return stripped
 
-    logger.info(f"API query received (user: {current_user}, session: {request.session_id}): {request.query[:80]}...")
+
+@app.post("/api/query", response_model=QueryResponse)
+@limiter.limit("30/minute")
+def query(request: Request, query_req: QueryRequest, current_user: str = Depends(get_current_user)):
+    """Send a query to the JARVIS orchestrator under user context."""
+    validated_query = validate_and_sanitize_query(query_req.query)
+
+    logger.info(f"API query received (user: {current_user}, session: {query_req.session_id}): {validated_query[:80]}...")
     try:
         result = orchestrator.run(
-            request.query, 
-            session_id=request.session_id, 
-            confirm_build=request.confirm_build
+            validated_query, 
+            session_id=query_req.session_id, 
+            confirm_build=query_req.confirm_build
         )
         return QueryResponse(
-            query=request.query,
+            query=validated_query,
             response=result["response"],
             agents_used=result["agents_used"],
             needs_builder_confirmation=result.get("needs_builder_confirmation"),
@@ -548,7 +607,8 @@ def query(request: QueryRequest, current_user: str = Depends(get_current_user)):
 
 
 @app.post("/api/query/stream")
-async def query_stream(request: QueryRequest, current_user: str = Depends(get_current_user)):
+@limiter.limit("30/minute")
+async def query_stream(request: Request, query_req: QueryRequest, current_user: str = Depends(get_current_user)):
     """
     Streaming SSE endpoint for real-time query responses.
     Emits a structured sequence of server-sent events:
@@ -558,21 +618,21 @@ async def query_stream(request: QueryRequest, current_user: str = Depends(get_cu
       - {"type": "done",  "agents_used": [...]}
       - {"type": "error", "detail": "..."}
     """
-    if not request.query.strip():
-        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+    validated_query = validate_and_sanitize_query(query_req.query)
 
-    logger.info(f"SSE stream query (user: {current_user}, session: {request.session_id}): {request.query[:80]}...")
+    logger.info(f"SSE stream query (user: {current_user}, session: {query_req.session_id}): {validated_query[:80]}...")
 
     import threading
     import queue as queue_module
     from backend.config import load_enabled_agents
     from backend.core.memory import ConversationMemory
-    from backend.core.analytics import current_session_id, current_query_id, current_step_name
+    from backend.core.analytics import current_session_id, current_query_id, current_step_name, current_stream_queue
     from backend.core.planner import Planner
     from backend.core.synthesizer import Synthesizer
     from backend.core.registry import AgentRegistry
     import yaml, os, contextvars
 
+    disconnect_event = threading.Event()
     event_queue: queue_module.Queue = queue_module.Queue()
     _SENTINEL = object()
 
@@ -581,11 +641,12 @@ async def query_stream(request: QueryRequest, current_user: str = Depends(get_cu
         try:
             # Propagate context vars into thread
             current_user_id.set(current_user)
-            current_session_id.set(request.session_id)
-            current_query_id.set(request.query)
+            current_session_id.set(query_req.session_id)
+            current_query_id.set(validated_query)
+            current_stream_queue.set(event_queue)
 
             from backend.config import load_enabled_agents
-            memory = ConversationMemory(request.session_id)
+            memory = ConversationMemory(query_req.session_id)
             chat_history = memory.get_context_string()
 
             planner = Planner()
@@ -612,6 +673,10 @@ async def query_stream(request: QueryRequest, current_user: str = Depends(get_cu
                 workspace_rules = ""
 
             for step_num in range(1, max_steps + 1):
+                if disconnect_event.is_set():
+                    logger.info("SSE client disconnect detected. Aborting execution thread loop.")
+                    return
+
                 scratchpad_lines = []
                 for s in steps_taken:
                     scratchpad_lines.append(
@@ -622,7 +687,7 @@ async def query_stream(request: QueryRequest, current_user: str = Depends(get_cu
                 scratchpad = "\n".join(scratchpad_lines) if scratchpad_lines else "No steps taken yet."
 
                 plan_step = planner.plan(
-                    query=request.query,
+                    query=validated_query,
                     agent_descriptions=agent_descriptions,
                     valid_targets=valid_targets,
                     chat_history=chat_history,
@@ -640,7 +705,7 @@ async def query_stream(request: QueryRequest, current_user: str = Depends(get_cu
                     break
 
                 # Handle builder confirmation (same as non-streaming)
-                if agent_name == "agent_builder" and request.confirm_build is None:
+                if agent_name == "agent_builder" and query_req.confirm_build is None:
                     event_queue.put({
                         "type": "needs_confirmation",
                         "message": f"I need to create a new custom agent: **{agent_query}**. Confirm to proceed.",
@@ -649,34 +714,58 @@ async def query_stream(request: QueryRequest, current_user: str = Depends(get_cu
                     event_queue.put(_SENTINEL)
                     return
 
-                # Emit step start event
-                event_queue.put({
-                    "type": "step_start",
-                    "step": step_num,
-                    "agent": agent_name,
-                    "thought": plan_step.thought,
-                })
+                # Emit step start event and record agents used
+                for act in plan_step.actions:
+                    agents_used.add(act.target)
+                    event_queue.put({
+                        "type": "step_start",
+                        "step": step_num,
+                        "agent": act.target,
+                        "thought": plan_step.thought,
+                    })
 
-                agents_used.add(agent_name)
-                current_step_name.set(f"agent:{agent_name}")
+                # Parallel execute actions for streaming thread pool
+                from concurrent.futures import ThreadPoolExecutor
+                
+                def _stream_worker(act):
+                    if disconnect_event.is_set():
+                        return act.target, act.query, "Execution aborted: client disconnected."
+                    current_user_id.set(user_id)
+                    current_session_id.set(query_req.session_id)
+                    current_query_id.set(validated_query)
+                    current_step_name.set(f"agent:{act.target}")
+                    current_stream_queue.set(event_queue)
+                    res = orchestrator._execute_task(act.target, act.query, chat_history=chat_history)
+                    return act.target, act.query, res
 
-                result = orchestrator._execute_task(agent_name, agent_query, chat_history=chat_history)
+                results = []
+                with ThreadPoolExecutor(max_workers=max(1, len(plan_step.actions))) as executor:
+                    futures = [executor.submit(_stream_worker, act) for act in plan_step.actions]
+                    for future in futures:
+                        try:
+                            results.append(future.result())
+                        except Exception as e:
+                            logger.error(f"Streaming parallel worker task error: {e}")
 
-                # Emit agent result event
-                event_queue.put({
-                    "type": "agent_result",
-                    "step": step_num,
-                    "agent": agent_name,
-                    "result": result,
-                })
+                if disconnect_event.is_set():
+                    logger.info("SSE client disconnect detected. Aborting execution thread loop post-execution.")
+                    return
 
-                steps_taken.append({
-                    "step": step_num,
-                    "thought": plan_step.thought,
-                    "agent": agent_name,
-                    "query": agent_query,
-                    "result": result,
-                })
+                # Emit agent result events and record steps
+                for target, act_query, res in results:
+                    event_queue.put({
+                        "type": "agent_result",
+                        "step": step_num,
+                        "agent": target,
+                        "result": res,
+                    })
+                    steps_taken.append({
+                        "step": step_num,
+                        "thought": plan_step.thought,
+                        "agent": target,
+                        "query": act_query,
+                        "result": res,
+                    })
 
             # Check for direct sheet/doc output
             sheets_or_doc_step = next(
@@ -685,10 +774,12 @@ async def query_stream(request: QueryRequest, current_user: str = Depends(get_cu
             )
 
             if sheets_or_doc_step:
+                if disconnect_event.is_set():
+                    return
                 # Emit the direct result as one synthesis_chunk + done
                 event_queue.put({"type": "synthesis_chunk", "chunk": sheets_or_doc_step["result"]})
                 event_queue.put({"type": "done", "agents_used": list(agents_used)})
-                memory.add_message("user", request.query)
+                memory.add_message("user", validated_query)
                 memory.add_message("assistant", sheets_or_doc_step["result"])
                 event_queue.put(_SENTINEL)
                 return
@@ -725,12 +816,17 @@ async def query_stream(request: QueryRequest, current_user: str = Depends(get_cu
 
             full_response_parts = []
             try:
+                if disconnect_event.is_set():
+                    return
                 stream = (synth_prompt | llm).stream({
-                    "query": request.query,
+                    "query": validated_query,
                     "agent_results": combined_results,
                     "chat_history": chat_history,
                 })
                 for chunk in stream:
+                    if disconnect_event.is_set():
+                        logger.info("SSE client disconnect detected during synthesis. Aborting.")
+                        return
                     token = chunk.content if hasattr(chunk, "content") else str(chunk)
                     if token:
                         full_response_parts.append(token)
@@ -744,7 +840,7 @@ async def query_stream(request: QueryRequest, current_user: str = Depends(get_cu
             full_response = "".join(full_response_parts)
 
             # Save to memory
-            memory.add_message("user", request.query)
+            memory.add_message("user", validated_query)
             memory.add_message("assistant", full_response)
 
             event_queue.put({"type": "done", "agents_used": list(agents_used)})
@@ -761,17 +857,38 @@ async def query_stream(request: QueryRequest, current_user: str = Depends(get_cu
 
     async def event_generator():
         loop = asyncio.get_event_loop()
-        while True:
-            # Poll queue in a non-blocking async-friendly way
-            try:
-                event = await loop.run_in_executor(None, lambda: event_queue.get(timeout=120))
-            except Exception:
-                yield f"data: {json.dumps({'type': 'error', 'detail': 'Stream timed out'})}\n\n"
-                break
-            if event is _SENTINEL:
-                yield f"data: {json.dumps({'type': 'stream_end'})}\n\n"
-                break
-            yield f"data: {json.dumps(event)}\n\n"
+        try:
+            while True:
+                # Check if connection was closed by the client
+                if await request.is_disconnected():
+                    logger.info("Client disconnected SSE stream request. Setting disconnect event.")
+                    disconnect_event.set()
+                    break
+
+                # Poll queue in a non-blocking async-friendly way
+                try:
+                    # Run in executor with small timeout to allow checking client disconnection status periodically
+                    event = await loop.run_in_executor(None, lambda: event_queue.get(timeout=2.0))
+                except queue_module.Empty:
+                    # Queue was empty, just loop back to check disconnection status and try again
+                    continue
+                except Exception as e:
+                    logger.error(f"SSE Queue read error: {e}")
+                    yield f"data: {json.dumps({'type': 'error', 'detail': 'Stream error occurred'})}\n\n"
+                    break
+
+                if event is _SENTINEL:
+                    yield f"data: {json.dumps({'type': 'stream_end'})}\n\n"
+                    break
+
+                yield f"data: {json.dumps(event)}\n\n"
+        except asyncio.CancelledError:
+            logger.info("SSE generator task cancelled. Setting disconnect event.")
+            disconnect_event.set()
+            raise
+        finally:
+            # Assure clean up trigger
+            disconnect_event.set()
 
     return StreamingResponse(
         event_generator(),
@@ -1987,4 +2104,301 @@ def run_terminal_command(request: TerminalRequest, current_user: str = Depends(g
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Vibe-Coding Code Generator ──────────────────────────────────────
+class CodeGenerateRequest(BaseModel):
+    prompt: str
+    language: str = "python"
+    max_tokens: int = 2048
 
+
+@app.get("/api/code/languages")
+def get_supported_languages():
+    """Returns all supported programming languages for the developer profile."""
+    from backend.agents.code_agent import SUPPORTED_LANGUAGES
+    from backend.config import VIBE_CODING_MODEL_ID
+    return {
+        "model": VIBE_CODING_MODEL_ID,
+        "model_url": f"https://huggingface.co/{VIBE_CODING_MODEL_ID}",
+        "languages": {
+            lang: {
+                "extension": info["ext"],
+                "category": info["category"],
+                "runner": info.get("runner"),
+            }
+            for lang, info in SUPPORTED_LANGUAGES.items()
+        },
+        "total": len(SUPPORTED_LANGUAGES),
+    }
+
+
+@app.post("/api/code/generate")
+@limiter.limit("20/minute")
+async def generate_code_vibe(
+    request: Request,
+    code_req: CodeGenerateRequest,
+    current_user: str = Depends(get_current_user)
+):
+    """
+    Generates code using:
+      1. Qwen/Qwen3-Coder-480B-A35B-Instruct (HuggingFace) — primary
+      2. sakmkmk2/Vibe-Coding-Claude-Fable-5 (HuggingFace) — fast fallback
+      3. Groq llm — tertiary fallback when HF token not set
+    """
+    from backend.agents.code_agent import (
+        call_qwen3_coder, call_vibe_coding_model,
+        normalize_language, SUPPORTED_LANGUAGES,
+    )
+    from backend.config import HF_TOKEN_AVAILABLE, HF_CODER_MODEL, VIBE_CODING_MODEL_ID
+
+    lang = normalize_language(code_req.language)
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported language '{lang}'. Supported: {', '.join(sorted(SUPPORTED_LANGUAGES.keys()))}"
+        )
+
+    logger.info(f"[/api/code/generate] user={current_user} language={lang} prompt_len={len(code_req.prompt)}")
+
+    # 1. Try Qwen3-Coder-480B (primary)
+    generated_code = call_qwen3_coder(code_req.prompt, language=lang, max_tokens=code_req.max_tokens)
+    model_used = HF_CODER_MODEL if generated_code else None
+
+    # 2. Try Vibe-Coding-Claude-Fable-5 (fast secondary)
+    if not generated_code:
+        logger.info("[/api/code/generate] Qwen3-Coder unavailable — trying Vibe-Coding fallback...")
+        generated_code = call_vibe_coding_model(code_req.prompt, language=lang, max_tokens=code_req.max_tokens)
+        model_used = VIBE_CODING_MODEL_ID if generated_code else None
+
+    if generated_code:
+        return {
+            "language": lang,
+            "code": generated_code,
+            "model": model_used,
+            "provider": "huggingface",
+            "hf_available": HF_TOKEN_AVAILABLE,
+        }
+
+    # 3. Tertiary fallback: Groq / HF llm
+    logger.info("[/api/code/generate] HF models unavailable — falling back to config llm")
+    try:
+        from langchain_core.messages import HumanMessage, SystemMessage
+        system_msg = SystemMessage(content=(
+            f"You are an expert {lang.upper()} developer. Generate clean, complete, "
+            f"production-ready {lang.upper()} code with proper error handling, comments, "
+            f"and type annotations. Only output the code, no explanations."
+        ))
+        human_msg = HumanMessage(content=code_req.prompt)
+        response = llm.invoke([system_msg, human_msg])
+        fallback_code = response.content if hasattr(response, "content") else str(response)
+
+        return {
+            "language": lang,
+            "code": fallback_code,
+            "model": "llm-fallback",
+            "provider": "groq_fallback",
+            "hf_available": HF_TOKEN_AVAILABLE,
+            "note": "HuggingFace models unavailable — used config LLM fallback."
+        }
+    except Exception as e:
+        logger.error(f"Code generation all fallbacks failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Code generation failed: {str(e)}")
+
+
+# ── Voice: Whisper STT + Kokoro TTS ─────────────────────────────────
+from backend.config import (
+    HF_STT_MODEL, HF_TTS_MODEL, HF_TOKEN_AVAILABLE,
+    HF_PLANNER_MODEL, HF_CODER_MODEL, HF_VISION_MODEL,
+    HF_EMBEDDING_MODEL, HF_RERANKER_MODEL, HF_IMAGE_MODEL,
+    AI_PROVIDER,
+)
+
+
+class SynthesizeRequest(BaseModel):
+    text: str
+    voice: str = "af_heart"
+    speed: float = 1.0
+
+
+@app.get("/api/voice/voices")
+def list_voices():
+    """Return available Kokoro-82M voice IDs with descriptions."""
+    from backend.agents.voice_agent import KOKORO_VOICES
+    return {
+        "model": HF_TTS_MODEL,
+        "model_url": f"https://huggingface.co/{HF_TTS_MODEL}",
+        "voices": KOKORO_VOICES,
+        "hf_available": HF_TOKEN_AVAILABLE,
+    }
+
+
+@app.post("/api/voice/transcribe")
+@limiter.limit("10/minute")
+async def transcribe_audio(
+    request: Request,
+    file: UploadFile = File(...),
+    language: str = Query(None, description="ISO 639-1 language code (e.g. 'en', 'hi'). Leave empty for auto-detect."),
+    current_user: str = Depends(get_current_user),
+):
+    """
+    Transcribe uploaded audio using openai/whisper-large-v3 (HuggingFace).
+    Accepts WAV, MP3, FLAC, OGG, M4A formats.
+    """
+    from backend.agents.voice_agent import transcribe_audio_whisper
+
+    if not HF_TOKEN_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="HuggingFace API token not configured. Set HUGGINGFACE_API_TOKEN in .env."
+        )
+
+    # Validate file size first (limit to 25MB)
+    MAX_FILE_SIZE = 25 * 1024 * 1024
+    
+    # Check content type / extension validation
+    allowed_mime_types = {
+        "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", 
+        "audio/flac", "audio/x-flac", "audio/ogg", "audio/x-ogg", 
+        "audio/m4a", "audio/x-m4a", "audio/aac", "audio/x-aac",
+        "audio/webm", "audio/ogg", "audio/mp4"
+    }
+    
+    content_type = file.content_type
+    filename_lower = (file.filename or "").lower()
+    allowed_extensions = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".webm"}
+    has_valid_extension = any(filename_lower.endswith(ext) for ext in allowed_extensions)
+    
+    if content_type and content_type not in allowed_mime_types and not has_valid_extension:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported audio file format '{content_type or 'unknown'}'. Allowed formats: WAV, MP3, FLAC, OGG, M4A, AAC, WEBM."
+        )
+
+    try:
+        audio_bytes = await file.read()
+        if len(audio_bytes) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File exceeds maximum size limit of 25MB (Uploaded: {len(audio_bytes) / 1024 / 1024:.2f}MB)."
+            )
+        logger.info(f"[/api/voice/transcribe] user={current_user} file={file.filename} size={len(audio_bytes)} bytes")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read uploaded file: {str(e)}")
+
+    text = transcribe_audio_whisper(audio_bytes, language=language or None)
+
+    if text is None:
+        raise HTTPException(
+            status_code=502,
+            detail="Whisper model is loading or unavailable. Please try again in 30 seconds."
+        )
+
+    return {
+        "text": text,
+        "language": language or "auto-detected",
+        "model": HF_STT_MODEL,
+        "model_url": f"https://huggingface.co/{HF_STT_MODEL}",
+    }
+
+
+@app.post("/api/voice/synthesize")
+@limiter.limit("10/minute")
+async def synthesize_speech(
+    request: Request,
+    synth_req: SynthesizeRequest,
+    current_user: str = Depends(get_current_user),
+):
+    """
+    Convert text to speech using hexgrad/Kokoro-82M (HuggingFace).
+    Returns audio/wav binary content.
+    """
+    from backend.agents.voice_agent import synthesize_speech_kokoro, KOKORO_VOICES
+
+    if not HF_TOKEN_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="HuggingFace API token not configured. Set HUGGINGFACE_API_TOKEN in .env."
+        )
+
+    if not synth_req.text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty.")
+
+    if synth_req.voice not in KOKORO_VOICES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown voice '{synth_req.voice}'. Available: {', '.join(KOKORO_VOICES.keys())}"
+        )
+
+    speed = max(0.5, min(2.0, synth_req.speed))
+    logger.info(f"[/api/voice/synthesize] user={current_user} voice={synth_req.voice} text_len={len(synth_req.text)}")
+
+    audio_bytes = synthesize_speech_kokoro(synth_req.text, voice=synth_req.voice, speed=speed)
+
+    if audio_bytes is None:
+        raise HTTPException(
+            status_code=502,
+            detail="Kokoro-82M model is loading or unavailable. Please try again in 30 seconds."
+        )
+
+    from fastapi.responses import Response
+    return Response(
+        content=audio_bytes,
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": "attachment; filename=speech.wav",
+            "X-Model": HF_TTS_MODEL,
+            "X-Voice": synth_req.voice,
+        }
+    )
+
+
+@app.get("/api/models/info")
+def get_models_info():
+    """Returns the full HuggingFace model configuration for all JARVIS AI tasks."""
+    return {
+        "provider": AI_PROVIDER,
+        "hf_token_configured": HF_TOKEN_AVAILABLE,
+        "models": {
+            "planner_chat": {
+                "model": HF_PLANNER_MODEL,
+                "url": f"https://huggingface.co/{HF_PLANNER_MODEL}",
+                "task": "Planner, General Chat, RAG Synthesis",
+            },
+            "coding": {
+                "model": HF_CODER_MODEL,
+                "url": f"https://huggingface.co/{HF_CODER_MODEL}",
+                "task": "Code Generation (30+ languages)",
+            },
+            "vision_ocr": {
+                "model": HF_VISION_MODEL,
+                "url": f"https://huggingface.co/{HF_VISION_MODEL}",
+                "task": "Vision / OCR / Document Analysis",
+            },
+            "embeddings": {
+                "model": HF_EMBEDDING_MODEL,
+                "url": f"https://huggingface.co/{HF_EMBEDDING_MODEL}",
+                "task": "RAG Embeddings (Multilingual)",
+            },
+            "reranking": {
+                "model": HF_RERANKER_MODEL,
+                "url": f"https://huggingface.co/{HF_RERANKER_MODEL}",
+                "task": "RAG Reranking",
+            },
+            "speech_to_text": {
+                "model": HF_STT_MODEL,
+                "url": f"https://huggingface.co/{HF_STT_MODEL}",
+                "task": "Audio Transcription",
+            },
+            "text_to_speech": {
+                "model": HF_TTS_MODEL,
+                "url": f"https://huggingface.co/{HF_TTS_MODEL}",
+                "task": "Speech Synthesis",
+            },
+            "image_generation": {
+                "model": HF_IMAGE_MODEL,
+                "url": f"https://huggingface.co/{HF_IMAGE_MODEL}",
+                "task": "Text-to-Image Generation",
+            },
+        }
+    }

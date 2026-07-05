@@ -24,10 +24,7 @@ logger = get_logger("core.planner")
 
 
 # ── Structured Output Model ──────────────────────────────────────────
-class PlannerStep(BaseModel):
-    action: Literal["run_agent", "finish"] = Field(
-        description="Choose 'run_agent' if there are still actions to perform (like sending/drafting an email, writing code, searching the web) or if you need to gather more information. Choose 'finish' ONLY when all requested tasks/actions are fully completed."
-    )
+class AgentAction(BaseModel):
     target: str = Field(
         default="",
         description="The agent name to target. Set to empty string if action is finish."
@@ -35,6 +32,15 @@ class PlannerStep(BaseModel):
     query: str = Field(
         default="",
         description="The query or prompt to pass to the target agent. Set to empty string if action is finish."
+    )
+
+class PlannerStep(BaseModel):
+    action: Literal["run_agents", "finish"] = Field(
+        description="Choose 'run_agents' if there are one or more actions/agent calls to perform (which can run in parallel if multiple are returned). Choose 'finish' ONLY when all requested tasks/actions are fully completed."
+    )
+    actions: list[AgentAction] = Field(
+        default=[],
+        description="A list of agent actions to execute. Can specify multiple actions to execute them concurrently/in parallel if they are independent (e.g. search web and compile code)."
     )
     thought: str = Field(
         description="Your reasoning for taking this step: what information you have, and what you still need."
@@ -52,7 +58,8 @@ class Planner:
             (
                 "system",
                 "You are the central planner for JARVIS, an autonomous AI operating system.\n"
-                "Your job is to solve the user's request step-by-step by deciding which agent to invoke next, or when to finish.\n\n"
+                "Your job is to solve the user's request step-by-step by deciding which agents to invoke next, or when to finish.\n"
+                "You support PARALLEL/CONCURRENT agent execution. If there are multiple independent sub-tasks that do not depend on each other's outputs, return all of them in a single step in the 'actions' list so they can execute concurrently.\n\n"
                 "Workspace Rules & Profile directives:\n"
                 "{workspace_rules}\n\n"
                 "Available agents you can invoke:\n"
@@ -90,18 +97,16 @@ class Planner:
                 if "exam_generator" in valid_targets:
                     logger.info("Deterministic override: Routing test/exam/worksheet query directly to 'exam_generator'.")
                     return PlannerStep(
-                        action="run_agent",
-                        target="exam_generator",
-                        query=query,
+                        action="run_agents",
+                        actions=[AgentAction(target="exam_generator", query=query)],
                         thought="Directly executing question paper / exam / worksheet generation via 'exam_generator'."
                     )
             elif any(k in q_lower for k in ["paper check", "check paper", "grade paper", "evaluat", "rubric", "quiz", "fun activity", "activity", "activities", "game"]):
                 if "document_exam_scanner" in valid_targets:
                     logger.info("Deterministic override: Routing paper checking / activity query directly to 'document_exam_scanner'.")
                     return PlannerStep(
-                        action="run_agent",
-                        target="document_exam_scanner",
-                        query=query,
+                        action="run_agents",
+                        actions=[AgentAction(target="document_exam_scanner", query=query)],
                         thought="Directly executing paper checking and activity generation via 'document_exam_scanner'."
                     )
             elif any(k in q_lower for k in ["diagram", "illustration", "flowchart", "blackboard art"]):
@@ -109,18 +114,16 @@ class Planner:
                 if target_agent in valid_targets:
                     logger.info(f"Deterministic override: Routing diagram query directly to '{target_agent}'.")
                     return PlannerStep(
-                        action="run_agent",
-                        target=target_agent,
-                        query=query,
+                        action="run_agents",
+                        actions=[AgentAction(target=target_agent, query=query)],
                         thought=f"Directly executing diagram creation via '{target_agent}' tool."
                     )
             elif any(k in q_lower for k in ["lecture", "lesson", "curriculum", "syllabus", "unit plan", "speech", "planner"]):
                 if "lesson_architect" in valid_targets:
                     logger.info("Deterministic override: Routing lesson plan/planner query directly to 'lesson_architect'.")
                     return PlannerStep(
-                        action="run_agent",
-                        target="lesson_architect",
-                        query=query,
+                        action="run_agents",
+                        actions=[AgentAction(target="lesson_architect", query=query)],
                         thought="Directly executing multi-day curriculum & lesson planning via 'lesson_architect'."
                     )
             elif any(k in q_lower for k in ["timetable", "time table"]):
@@ -131,9 +134,8 @@ class Planner:
                 if target_agent in valid_targets:
                     logger.info(f"Deterministic override: Routing timetable query directly to '{target_agent}'.")
                     return PlannerStep(
-                        action="run_agent",
-                        target=target_agent,
-                        query=query,
+                        action="run_agents",
+                        actions=[AgentAction(target=target_agent, query=query)],
                         thought=f"Directly executing timetable scheduling via '{target_agent}'."
                     )
             elif any(k in q_lower for k in ["spreadsheet", "gradebook", "mark-sheet", "marksheet", "attendance", "progress"]) or ("sheet" in q_lower and "worksheet" not in q_lower):
@@ -141,9 +143,8 @@ class Planner:
                 if target_agent in valid_targets:
                     logger.info(f"Deterministic override: Routing sheet creation query directly to '{target_agent}'.")
                     return PlannerStep(
-                        action="run_agent",
-                        target=target_agent,
-                        query=query,
+                        action="run_agents",
+                        actions=[AgentAction(target=target_agent, query=query)],
                         thought=f"Directly executing sheet creation via '{target_agent}' tool."
                     )
             elif any(k in q_lower for k in ["reminder", "note", "observation"]):
@@ -151,17 +152,15 @@ class Planner:
                 if target_agent in valid_targets:
                     logger.info(f"Deterministic override: Routing note query directly to '{target_agent}'.")
                     return PlannerStep(
-                        action="run_agent",
-                        target=target_agent,
-                        query=query,
+                        action="run_agents",
+                        actions=[AgentAction(target=target_agent, query=query)],
                         thought=f"Directly executing note/reminder creation via '{target_agent}'."
                     )
             elif ("meeting" in q_lower or "schedule" in q_lower or "calendar" in q_lower or "event" in q_lower) and "calendar" in valid_targets:
                 logger.info("Deterministic override: Routing calendar query directly to 'calendar'.")
                 return PlannerStep(
-                    action="run_agent",
-                    target="calendar",
-                    query=query,
+                    action="run_agents",
+                    actions=[AgentAction(target="calendar", query=query)],
                     thought="Directly executing calendar scheduling via 'calendar' tool."
                 )
 
@@ -179,14 +178,19 @@ class Planner:
             })
             
             # Post-validation of target
-            if step.action == "run_agent":
-                if not step.target or step.target.strip().lower() not in valid_targets:
-                    logger.warning(f"Planner suggested invalid target '{step.target}'. Forcing finish.")
+            if step.action == "run_agents":
+                valid_actions = []
+                for act in step.actions:
+                    if act.target and act.target.strip().lower() in valid_targets:
+                        valid_actions.append(act)
+                    else:
+                        logger.warning(f"Planner suggested invalid target '{act.target}'. Skipping this action.")
+                step.actions = valid_actions
+                if not step.actions:
+                    logger.warning("No valid actions remained. Forcing finish.")
                     step.action = "finish"
-                    step.target = ""
-                    step.query = ""
             
-            logger.info(f"Planner decision: Action={step.action}, Target={step.target}, Thought={step.thought[:60]}...")
+            logger.info(f"Planner decision: Action={step.action}, Actions={step.actions}, Thought={step.thought[:60]}...")
             return step
         except Exception as e:
             logger.error(f"Planning step failed: {e}. Defaulting to finish.")

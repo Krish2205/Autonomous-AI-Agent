@@ -314,27 +314,94 @@ class ExecutionSandbox:
 
     def execute_python(self, code: str) -> dict:
         """Execute Python code in the best available sandbox environment."""
-        import uuid
+        return self.execute_code(code, language="python")
 
-        # E2B Tier: use run_code() for direct Python execution
+    def execute_code(self, code: str, language: str) -> dict:
+        """Execute code in a supported programming language inside the sandbox environment."""
+        import uuid
+        from backend.agents.code_agent import SUPPORTED_LANGUAGES, normalize_language
+        
+        lang = normalize_language(language)
+        lang_info = SUPPORTED_LANGUAGES.get(lang)
+        if not lang_info:
+            return _result(stderr=f"Unsupported language '{language}'", exit_code=1, tier=self._active_tier)
+
+        ext = lang_info.get("ext", ".txt")
+        runner = lang_info.get("runner")
+
+        # E2B Tier: runs Python code natively, other languages via commands
         if self._active_tier == "e2b":
             try:
-                return self._e2b.execute_code(code)
+                if lang == "python":
+                    return self._e2b.execute_code(code)
+                else:
+                    run_filename = f"run_{uuid.uuid4().hex[:8]}{ext}"
+                    self._e2b.write_file(run_filename, code)
+                    if runner:
+                        result = self.execute_command(runner.split() + [run_filename])
+                    else:
+                        result = _result(stdout=f"Code written to {run_filename}. No runner defined.", tier="e2b")
+                    return result
             except Exception as e:
-                logger.error(f"E2B tier failed for execute_python: {e}")
+                logger.error(f"E2B tier failed for execute_code: {e}")
                 self._fallback_tier()
 
-        # Docker / Host Tier: write script to workspace, then run
-        run_filename = f"_run_{uuid.uuid4().hex[:8]}.py"
+        # Docker / Host Tier: write script to workspace, then execute command
+        run_filename = f"run_{uuid.uuid4().hex[:8]}{ext}"
         temp_run_path = os.path.join(self._workspace, run_filename)
         try:
             with open(temp_run_path, "w", encoding="utf-8") as f:
                 f.write(code)
-            result = self.execute_command(["python", run_filename])
+            if runner:
+                # Handle compiler/interpreted splits
+                if lang == "c":
+                    binary_name = run_filename.replace(".c", "")
+                    compile_cmd = ["gcc", run_filename, "-o", binary_name]
+                    compile_res = self.execute_command(compile_cmd)
+                    if compile_res["exit_code"] != 0:
+                        return compile_res
+                    result = self.execute_command([f"./{binary_name}"])
+                elif lang == "cpp":
+                    binary_name = run_filename.replace(".cpp", "")
+                    compile_cmd = ["g++", run_filename, "-o", binary_name]
+                    compile_res = self.execute_command(compile_cmd)
+                    if compile_res["exit_code"] != 0:
+                        return compile_res
+                    result = self.execute_command([f"./{binary_name}"])
+                elif lang == "rust":
+                    binary_name = run_filename.replace(".rs", "")
+                    compile_cmd = ["rustc", run_filename]
+                    compile_res = self.execute_command(compile_cmd)
+                    if compile_res["exit_code"] != 0:
+                        return compile_res
+                    result = self.execute_command([f"./{binary_name}"])
+                elif lang == "java":
+                    compile_cmd = ["javac", run_filename]
+                    compile_res = self.execute_command(compile_cmd)
+                    if compile_res["exit_code"] != 0:
+                        return compile_res
+                    class_name = run_filename.replace(".java", "")
+                    result = self.execute_command(["java", class_name])
+                else:
+                    # Interpreted runners
+                    result = self.execute_command(runner.split() + [run_filename])
+            else:
+                result = _result(stdout=f"Code written to {run_filename}. No runner defined.", tier=self._active_tier)
             return result
         finally:
             if os.path.exists(temp_run_path):
-                os.remove(temp_run_path)
+                try:
+                    os.remove(temp_run_path)
+                    # Also try to clean up compiled binaries if any
+                    for ext_to_clean in ["", ".exe", ".class"]:
+                        bin_path = temp_run_path.rsplit(".", 1)[0] + ext_to_clean
+                        if os.path.exists(bin_path):
+                            if os.path.isdir(bin_path):
+                                shutil.rmtree(bin_path)
+                            else:
+                                os.remove(bin_path)
+                except Exception:
+                    pass
 
     def execute_command(self, cmd: list[str]) -> dict:
         """Execute a shell command in the best available sandbox environment."""

@@ -1,17 +1,28 @@
 """
 JARVIS — Shared Configuration
-Single source of truth for all LLM instances, paths, and settings.
+Single source of truth for all LLM instances, paths, model IDs, and settings.
+
+AI Provider: HuggingFace Inference API (OpenAI-compatible /v1 endpoint)
+  - Planner / General Chat : Qwen/Qwen3-32B-Instruct
+  - Coding                 : Qwen/Qwen3-Coder-480B-A35B-Instruct
+  - Vision / OCR           : Qwen/Qwen2.5-VL-72B-Instruct
+  - Embeddings             : BAAI/bge-m3
+  - Reranking              : BAAI/bge-reranker-v2-m3
+  - Speech-to-Text         : openai/whisper-large-v3
+  - Text-to-Speech         : hexgrad/Kokoro-82M
+  - Image Generation       : black-forest-labs/FLUX.1-dev
+  - RAG Synthesis          : Qwen/Qwen3-32B-Instruct (same as planner)
+
+Fallback: Groq (llama-3.3-70b-versatile) when HF token is not set.
 """
 
 import os
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
 
-# ── Load environment variables ──────────────────────────────────────
+# ── Load environment variables ───────────────────────────────────────
 load_dotenv()
 
-# ── Project Paths ───────────────────────────────────────────────────
-# PROJECT_ROOT points to the JARVIS/ directory (one level above backend/)
+# ── Project Paths ────────────────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 DOCUMENTS_DIR = os.path.join(DATA_DIR, "documents")
@@ -20,28 +31,26 @@ WORKSPACE_DIR = os.path.join(DATA_DIR, "workspace")
 GENERATED_IMAGES_DIR = os.path.join(DATA_DIR, "generated_images")
 DATABASE_PATH = os.path.join(DATA_DIR, "jarvis.db")
 
-# Ensure directories exist
 for _dir in [DATA_DIR, DOCUMENTS_DIR, FAISS_DIR, WORKSPACE_DIR, GENERATED_IMAGES_DIR]:
     os.makedirs(_dir, exist_ok=True)
 
-# ── Dynamic Multi-User Scoping ──────────────────────────────────────
+# ── Dynamic Multi-User Scoping ────────────────────────────────────────
 import contextvars
 
 current_user_id = contextvars.ContextVar("current_user_id", default=None)
 
+
 def get_user_documents_dir() -> str:
-    """Get the documents directory path for the current active user."""
     user_id = current_user_id.get()
     if user_id:
-        # Sanitize user_id to prevent directory traversal
         safe_user_id = "".join(c for c in user_id if c.isalnum() or c in ("-", "_"))
         path = os.path.join(DOCUMENTS_DIR, safe_user_id)
         os.makedirs(path, exist_ok=True)
         return path
     return DOCUMENTS_DIR
 
+
 def get_user_faiss_dir() -> str:
-    """Get the FAISS index directory path for the current active user."""
     user_id = current_user_id.get()
     if user_id:
         safe_user_id = "".join(c for c in user_id if c.isalnum() or c in ("-", "_"))
@@ -50,8 +59,8 @@ def get_user_faiss_dir() -> str:
         return path
     return FAISS_DIR
 
+
 def get_user_database_path() -> str:
-    """Get the SQLite database file path for the current active user."""
     user_id = current_user_id.get()
     if user_id:
         safe_user_id = "".join(c for c in user_id if c.isalnum() or c in ("-", "_"))
@@ -60,60 +69,308 @@ def get_user_database_path() -> str:
         return os.path.join(db_dir, f"jarvis_{safe_user_id}.db")
     return DATABASE_PATH
 
+
 def get_user_image_filename(filename: str) -> str:
-    """Get user-prefixed image filename."""
     user_id = current_user_id.get()
     if user_id:
         safe_user_id = "".join(c for c in user_id if c.isalnum() or c in ("-", "_"))
         return f"{safe_user_id}_{filename}"
     return filename
 
+
 def get_user_image_path(filename: str) -> str:
-    """Get image file path, ensuring it is user-scoped in name."""
     user_filename = get_user_image_filename(filename)
     return os.path.join(GENERATED_IMAGES_DIR, user_filename)
 
-# ── API Keys ────────────────────────────────────────────────────────
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
-COHERE_API_KEY = os.environ.get("COHERE_API_KEY")
-GMAIL_EMAIL = os.environ.get("GMAIL_EMAIL")
-GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
-SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
 
-# ── LLM Instances (shared across all agents) ───────────────────────
+# ── API Keys ──────────────────────────────────────────────────────────
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+COHERE_API_KEY = os.environ.get("COHERE_API_KEY", "")
+GMAIL_EMAIL = os.environ.get("GMAIL_EMAIL", "")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
+HUGGINGFACE_API_TOKEN = os.environ.get("HUGGINGFACE_API_TOKEN", "")
+
+# Check if HuggingFace token is valid (not a placeholder)
+HF_TOKEN_AVAILABLE = bool(
+    HUGGINGFACE_API_TOKEN
+    and HUGGINGFACE_API_TOKEN not in ("hf_your_token_here", "")
+)
+
+# ── HuggingFace Model IDs ─────────────────────────────────────────────
+HF_BASE_URL = "https://api-inference.huggingface.co/v1"
+HF_INFERENCE_URL = "https://api-inference.huggingface.co/models"
+
+# Chat / Reasoning
+HF_PLANNER_MODEL = "Qwen/Qwen3-32B-Instruct"
+HF_CODER_MODEL   = "Qwen/Qwen3-Coder-480B-A35B-Instruct"
+HF_VISION_MODEL  = "Qwen/Qwen2.5-VL-72B-Instruct"
+
+# Retrieval
+HF_EMBEDDING_MODEL = "BAAI/bge-m3"
+HF_RERANKER_MODEL  = "BAAI/bge-reranker-v2-m3"
+
+# Speech
+HF_STT_MODEL = "openai/whisper-large-v3"
+HF_TTS_MODEL = "hexgrad/Kokoro-82M"
+
+# Image
+HF_IMAGE_MODEL = "black-forest-labs/FLUX.1-dev"
+
+# Vibe-Coding secondary (fast, smaller coder)
+VIBE_CODING_MODEL_ID   = "sakmkmk2/Vibe-Coding-Claude-Fable-5"
+VIBE_CODING_HF_API_URL = f"{HF_INFERENCE_URL}/{VIBE_CODING_MODEL_ID}"
+
+# ── RAG / Embedding Settings ───────────────────────────────────────────
+EMBEDDING_MODEL  = HF_EMBEDDING_MODEL   # BAAI/bge-m3
+FAISS_SEARCH_K   = 2
+RERANK_TOP_N     = 2
+SEMANTIC_WEIGHT  = 0.6
+KEYWORD_WEIGHT   = 0.4
+CHUNK_SIZE       = 500
+CHUNK_OVERLAP    = 75
+
+# ── Analytics Handler ─────────────────────────────────────────────────
 from backend.core.analytics import AnalyticsCallbackHandler
 analytics_handler = AnalyticsCallbackHandler()
 
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    temperature=0.3,
-    groq_api_key=GROQ_API_KEY,
-    callbacks=[analytics_handler]
-)
+# ── LLM Caching Setup ──────────────────────────────────────────────────
+import logging
+import langchain
+from langchain_community.cache import SQLiteCache
 
-vision_llm = ChatGroq(
-    model="meta-llama/llama-4-scout-17b-16e-instruct",
-    temperature=0.1,
-    groq_api_key=GROQ_API_KEY,
-    callbacks=[analytics_handler]
-)
+_config_logger = logging.getLogger("config")
 
-# ── Model Settings ──────────────────────────────────────────────────
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-FAISS_SEARCH_K = 2
-RERANK_TOP_N = 2
-SEMANTIC_WEIGHT = 0.6
-KEYWORD_WEIGHT = 0.4
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 75
+try:
+    cache_db_path = os.path.join(DATA_DIR, "databases", "langchain_cache.db")
+    os.makedirs(os.path.dirname(cache_db_path), exist_ok=True)
+    langchain.llm_cache = SQLiteCache(database_path=cache_db_path)
+    _config_logger.info(f"LangChain SQLite cache enabled at: {cache_db_path}")
+except Exception as e:
+    # Fallback to InMemoryCache if SQLiteCache setup fails
+    from langchain_core.caches import InMemoryCache
+    langchain.llm_cache = InMemoryCache()
+    _config_logger.warning(f"Failed to load SQLiteCache ({e}). Fallback to InMemoryCache.")
+
+
+# ── LLM Factory ───────────────────────────────────────────────────────
+def _make_hf_chat_llm(model_id: str, temperature: float = 0.1, max_tokens: int = 4096):
+    """
+    Create a LangChain chat LLM using HuggingFace's OpenAI-compatible /v1 endpoint.
+    Requires HUGGINGFACE_API_TOKEN to be set.
+    """
+    from langchain_openai import ChatOpenAI
+    return ChatOpenAI(
+        model=model_id,
+        openai_api_base=HF_BASE_URL,
+        openai_api_key=HUGGINGFACE_API_TOKEN,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        callbacks=[analytics_handler],
+    )
+
+
+def _make_groq_llm(model: str = "llama-3.3-70b-versatile", temperature: float = 0.3):
+    """Create a Groq LLM as fallback when HF token is unavailable."""
+    from langchain_groq import ChatGroq
+    return ChatGroq(
+        model=model,
+        temperature=temperature,
+        groq_api_key=GROQ_API_KEY,
+        callbacks=[analytics_handler],
+    )
+
+
+# ── Primary LLM Instances ─────────────────────────────────────────────
+import requests as _requests
+import time as _time
+
+def check_hf_token_validity() -> bool:
+    """Verifies HUGGINGFACE_API_TOKEN with the Hugging Face API whoami endpoint."""
+    if not HUGGINGFACE_API_TOKEN or HUGGINGFACE_API_TOKEN in ("hf_your_token_here", ""):
+        return False
+    try:
+        url = "https://huggingface.co/api/whoami"
+        headers = {"Authorization": f"Bearer {HUGGINGFACE_API_TOKEN}"}
+        resp = _requests.get(url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            user_info = resp.json()
+            _config_logger.info(f"✅ HUGGINGFACE_API_TOKEN validated. User: {user_info.get('name', 'unknown')} ({user_info.get('type', 'user')})")
+            return True
+        else:
+            _config_logger.warning(f"❌ HUGGINGFACE_API_TOKEN validation failed: API returned status {resp.status_code}")
+            return False
+    except Exception as e:
+        _config_logger.warning(f"⚠️ Could not validate HUGGINGFACE_API_TOKEN (network check failed): {e}")
+        # Default to True if network is down but token is populated so that we don't break offline fallbacks
+        return True
+
+# Run health check at startup
+HF_TOKEN_VALID = HF_TOKEN_AVAILABLE and check_hf_token_validity()
+
+if HF_TOKEN_VALID:
+    _config_logger.info(f"✅ Using HuggingFace models as primary AI provider.")
+
+    # General planner / chat / RAG synthesis
+    llm = _make_hf_chat_llm(HF_PLANNER_MODEL, temperature=0.1, max_tokens=4096)
+
+    # Dedicated coding LLM (Qwen3-Coder 480B MoE)
+    code_llm = _make_hf_chat_llm(HF_CODER_MODEL, temperature=0.05, max_tokens=8192)
+
+    # Vision / multimodal LLM
+    vision_llm = _make_hf_chat_llm(HF_VISION_MODEL, temperature=0.1, max_tokens=4096)
+
+    AI_PROVIDER = "huggingface"
+else:
+    _config_logger.warning(
+        "⚠️ Using Groq Fallback AI Provider. "
+        "Set a valid HUGGINGFACE_API_TOKEN in .env to enable HuggingFace models."
+    )
+    # Fallback: Groq for all three roles
+    llm        = _make_groq_llm("llama-3.3-70b-versatile", 0.3)
+    code_llm   = _make_groq_llm("llama-3.3-70b-versatile", 0.1)
+    vision_llm = _make_groq_llm("meta-llama/llama-4-scout-17b-16e-instruct", 0.1)
+
+    AI_PROVIDER = "groq_fallback"
+
+_config_logger.info(f"AI Provider: {AI_PROVIDER}")
+
+
+# ── HuggingFace Direct API Helpers ────────────────────────────────────
+def hf_inference_post(model_id: str, payload: dict, timeout: int = 120, retries: int = 3) -> dict | None:
+    """
+    Generic POST to the HuggingFace Inference API with exponential backoff on 503 errors.
+    Returns parsed JSON response or None on error.
+    """
+    if not HF_TOKEN_VALID:
+        _config_logger.warning(f"[HF API] Valid token not set — skipping call to {model_id}")
+        return None
+
+    # Push progress update for model start
+    from backend.core.analytics import current_stream_queue, current_step_name
+    stream_q = current_stream_queue.get()
+    step_name = current_step_name.get()
+    if stream_q:
+        try:
+            stream_q.put({"type": "progress_chunk", "agent": step_name, "message": f"Calling HuggingFace model {model_id}..."})
+        except Exception:
+            pass
+
+    url = f"{HF_INFERENCE_URL}/{model_id}"
+    headers = {
+        "Authorization": f"Bearer {HUGGINGFACE_API_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    
+    # Request wait_for_model to force HF to load the model on its end if cold
+    payload_to_send = payload.copy() if payload else {}
+    if "options" not in payload_to_send:
+        payload_to_send["options"] = {}
+    payload_to_send["options"]["wait_for_model"] = True
+
+    delay = 2
+    for attempt in range(1, retries + 1):
+        try:
+            resp = _requests.post(url, json=payload_to_send, headers=headers, timeout=timeout)
+            if resp.status_code == 200:
+                if stream_q:
+                    try:
+                        stream_q.put({"type": "progress_chunk", "agent": step_name, "message": f"Model {model_id} execution completed successfully."})
+                    except Exception:
+                        pass
+                return resp.json()
+            elif resp.status_code == 503:
+                _config_logger.warning(f"[HF API] {model_id} is loading (503). Attempt {attempt}/{retries}. Retrying in {delay}s...")
+                if stream_q:
+                    try:
+                        stream_q.put({"type": "progress_chunk", "agent": step_name, "message": f"Model {model_id} is cold-starting. Retrying in {delay}s..."})
+                    except Exception:
+                        pass
+                _time.sleep(delay)
+                delay *= 2
+            else:
+                _config_logger.error(f"[HF API] {model_id} error {resp.status_code}: {resp.text[:200]}")
+                if stream_q:
+                    try:
+                        stream_q.put({"type": "progress_chunk", "agent": step_name, "message": f"Model {model_id} returned status {resp.status_code}."})
+                    except Exception:
+                        pass
+                return None
+        except Exception as e:
+            _config_logger.error(f"[HF API] Request to {model_id} failed (attempt {attempt}/{retries}): {e}")
+            if attempt == retries:
+                return None
+            _time.sleep(delay)
+            delay *= 2
+    return None
+
+
+def hf_inference_post_binary(model_id: str, payload: dict, timeout: int = 120, retries: int = 3) -> bytes | None:
+    """POST to HF Inference API expecting binary response (images, audio) with exponential backoff on 503."""
+    if not HF_TOKEN_VALID:
+        return None
+
+    from backend.core.analytics import current_stream_queue, current_step_name
+    stream_q = current_stream_queue.get()
+    step_name = current_step_name.get()
+    if stream_q:
+        try:
+            stream_q.put({"type": "progress_chunk", "agent": step_name, "message": f"Generating binary asset using HF {model_id}..."})
+        except Exception:
+            pass
+
+    url = f"{HF_INFERENCE_URL}/{model_id}"
+    headers = {
+        "Authorization": f"Bearer {HUGGINGFACE_API_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    
+    payload_to_send = payload.copy() if payload else {}
+    if "options" not in payload_to_send:
+        payload_to_send["options"] = {}
+    payload_to_send["options"]["wait_for_model"] = True
+
+    delay = 2
+    for attempt in range(1, retries + 1):
+        try:
+            resp = _requests.post(url, json=payload_to_send, headers=headers, timeout=timeout)
+            if resp.status_code == 200:
+                if stream_q:
+                    try:
+                        stream_q.put({"type": "progress_chunk", "agent": step_name, "message": f"Binary generation from {model_id} completed successfully."})
+                    except Exception:
+                        pass
+                return resp.content
+            elif resp.status_code == 503:
+                _config_logger.warning(f"[HF API] {model_id} is loading (503). Attempt {attempt}/{retries}. Retrying in {delay}s...")
+                if stream_q:
+                    try:
+                        stream_q.put({"type": "progress_chunk", "agent": step_name, "message": f"Model {model_id} is cold-starting. Retrying in {delay}s..."})
+                    except Exception:
+                        pass
+                _time.sleep(delay)
+                delay *= 2
+            else:
+                _config_logger.error(f"[HF API] {model_id} binary error {resp.status_code}: {resp.text[:200]}")
+                if stream_q:
+                    try:
+                        stream_q.put({"type": "progress_chunk", "agent": step_name, "message": f"Model {model_id} returned binary status {resp.status_code}."})
+                    except Exception:
+                        pass
+                return None
+        except Exception as e:
+            _config_logger.error(f"[HF API] Binary request to {model_id} failed (attempt {attempt}/{retries}): {e}")
+            if attempt == retries:
+                return None
+            _time.sleep(delay)
+            delay *= 2
+    return None
+
 
 
 # ── Workspace Profile Configuration ──────────────────────────────────
 import json
-import logging
-
-config_logger = logging.getLogger("config")
 
 DEFAULT_ROLE_AGENTS = {
     "developer": ["code", "devops", "package_manager", "database", "search", "summary", "agent_builder", "visualization", "scraper", "dev_team", "sheets", "calendar", "notes"],
@@ -127,18 +384,18 @@ DEFAULT_ROLE_AGENTS = {
     "healthcare_researcher": ["biomedical_rag", "analyse", "search", "summary", "translation"],
     "creative_marketer": ["marketing_campaign", "multimedia_processor", "image_gen", "visualization", "search", "summary"],
     "legal_ops": ["legal_contract", "talent_ops", "summary", "search", "analyse"],
-    "edtech_studio": ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "lesson_architect", "exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse"]
+    "edtech_studio": ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "lesson_architect", "exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse"],
 }
 
+
 def get_profile_config_path(user_id: str) -> str:
-    """Get the profile config JSON path for a user."""
     safe_user_id = "".join(c for c in user_id if c.isalnum() or c in ("-", "_"))
     db_dir = os.path.join(DATA_DIR, "databases")
     os.makedirs(db_dir, exist_ok=True)
     return os.path.join(db_dir, f"profile_{safe_user_id}.json")
 
+
 def load_profile_config(user_id: str) -> dict:
-    """Load the complete profile configuration for the user from SQLite database."""
     if not user_id:
         return {}
     try:
@@ -151,24 +408,20 @@ def load_profile_config(user_id: str) -> dict:
         if row and row["config"]:
             return json.loads(row["config"])
     except Exception as e:
-        config_logger.error(f"Failed to load profile config for {user_id} from DB: {e}")
-        
-    # Fallback to loading from legacy file if it exists
+        _config_logger.error(f"Failed to load profile config for {user_id} from DB: {e}")
     path = get_profile_config_path(user_id)
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 config_data = json.load(f)
-                # Automatically migrate legacy configuration to database
                 save_profile_config(user_id, config_data)
                 return config_data
         except Exception as e:
-            config_logger.error(f"Failed to load legacy profile config file: {e}")
-            
+            _config_logger.error(f"Failed to load legacy profile config file: {e}")
     return {}
 
+
 def save_profile_config(user_id: str, config: dict) -> None:
-    """Save the complete profile configuration for the user to SQLite database."""
     if not user_id:
         return
     try:
@@ -186,50 +439,40 @@ def save_profile_config(user_id: str, config: dict) -> None:
         conn.commit()
         conn.close()
     except Exception as e:
-        config_logger.error(f"Failed to save profile config for {user_id} to DB: {e}")
+        _config_logger.error(f"Failed to save profile config for {user_id} to DB: {e}")
+
 
 def load_enabled_agents(user_id: str) -> list[str]:
-    """Load the list of enabled agent names for the specified user."""
     if not user_id:
         user_id = "default"
-
-    # 1. Attempt to load from user profile configs database
     try:
         config = load_profile_config(user_id)
         if config and "enabled_agents" in config and config["enabled_agents"]:
             return config["enabled_agents"]
     except Exception as e:
-        config_logger.warning(f"Failed to load enabled agents from user config: {e}")
-
-    # 2. Check if user_id matches a preset role in DEFAULT_ROLE_AGENTS
+        _config_logger.warning(f"Failed to load enabled agents from user config: {e}")
     if user_id in DEFAULT_ROLE_AGENTS:
         return DEFAULT_ROLE_AGENTS[user_id]
-
-    # 3. Fallback: load all discovered agents
     try:
         from backend.agents import ALL_AGENTS
-        names = []
-        for agent_class in ALL_AGENTS:
-            if hasattr(agent_class, "name") and agent_class.name:
-                names.append(agent_class.name)
+        names = [a.name for a in ALL_AGENTS if hasattr(a, "name") and a.name]
         if names:
             return list(set(names))
     except Exception as e:
-        config_logger.warning(f"Failed dynamic load of all agents in load_enabled_agents: {e}")
-
-    # Final hardcoded fallback
-    return ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets", "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "lesson_architect", "exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect", "search", "summary", "analyse", "code", "devops", "cloud_infra", "github_workflow"]
+        _config_logger.warning(f"Failed dynamic load of all agents: {e}")
+    return ["teacher_executive_assistant", "document_exam_scanner", "sheets_gradebook_agent", "sheets",
+            "calendar_scheduler_agent", "calendar", "notes_manager_agent", "notes", "lesson_architect",
+            "exam_generator", "whatsapp_notice_curator", "hinglish_socratic_tutor", "cce_report_card_architect",
+            "search", "summary", "analyse", "code", "devops", "cloud_infra", "github_workflow"]
 
 
 def save_enabled_agents(user_id: str, enabled_agents: list[str]) -> None:
-    """Save the list of enabled agent names for the specified user."""
     config = load_profile_config(user_id)
     config["enabled_agents"] = enabled_agents
     save_profile_config(user_id, config)
 
 
 def get_user_integration(provider: str) -> dict:
-    """Fetch connected third-party integration configuration for the current active user."""
     user_id = current_user_id.get()
     keys_to_check = [user_id, "edtech_studio", "developer", "default"]
     for k in keys_to_check:
@@ -238,6 +481,3 @@ def get_user_integration(provider: str) -> dict:
             if cfg.get("connected"):
                 return cfg
     return {}
-
-
-
