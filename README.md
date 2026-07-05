@@ -589,107 +589,6 @@ graph TD
 
 ---
 
-## 🎯 How to Interview With This Project
-
-This section gives you **ready-to-use talking points** for every major technical area of JARVIS. Use these when recruiters or interviewers ask *"tell me about a project you built."*
-
----
-
-### 💬 Opening Pitch (30-second version)
-
-> *"I built JARVIS — a production-grade autonomous AI operating system. It's not a chatbot wrapper. It uses a real ReAct agentic loop where a Planner LLM reasons step-by-step, dynamically selects from 37+ specialized agents, and streams the final answer token-by-token to the user via Server-Sent Events — the same way ChatGPT works. It has multi-user auth, a 3-tier sandboxed code execution engine, hybrid RAG, and 12 industry workspace profiles."*
-
----
-
-### 🧠 1. ReAct Agentic Loop — "How does the AI actually think?"
-
-**What to say:**
-> *"The core is a ReAct loop — Reasoning + Acting. The Planner LLM receives the user's query, the conversation history, and a persistent scratchpad. It picks the most relevant agent, runs it, observes the result, updates the scratchpad, and repeats — up to 5 steps. Only then does the Synthesizer LLM stream the final human-readable response. This is fundamentally different from a single LLM call — it's autonomous multi-step problem solving."*
-
-**Technical depth to add if asked:**
-- The Planner runs on `Qwen/Qwen3-32B-Instruct` via HuggingFace's OpenAI-compatible `/v1/chat/completions` endpoint — falls back to `groq/llama-3.3-70b-versatile` when HF token is not set
-- Each step emits an SSE `step_start` event before executing, so the frontend shows "Running search..." in real time
-- The scratchpad is a formatted string of all `Thought → Action → Observation` triples, injected as context into the next planner call
-
----
-
-### ⚡ 2. SSE Streaming — "How did you implement real-time streaming like ChatGPT?"
-
-**What to say:**
-> *"I built a `POST /api/query/stream` endpoint using FastAPI's `StreamingResponse` with `text/event-stream` content type. The orchestrator pipeline runs in a background thread, pushing structured JSON events — `step_start`, `agent_result`, `synthesis_chunk`, `done` — into a `queue.Queue`. The main async thread reads from the queue and yields each line. On the frontend, I use the browser's native `ReadableStream` API with a `TextDecoder` to consume events and update the message bubble in place, character by character."*
-
-**Technical depth to add if asked:**
-- This avoids the entire dependency on WebSockets — SSE is simpler, unidirectional, and HTTP/1.1 compatible
-- The `synthesis_chunk` events come from LangChain's `(prompt | llm).stream()` — each `AIMessageChunk` is a separate queue event
-- The frontend sets `msg.isStreaming = true` on the in-progress bubble, triggering a blinking cyan cursor CSS animation via `@keyframes stream-blink`
-
----
-
-### 🐳 3. Multi-Tier Sandbox — "How do you safely execute untrusted code?"
-
-**What to say:**
-> *"I built an `ExecutionSandbox` class that auto-detects the best available execution environment at startup. Tier 1 is E2B Cloud — a remote Python VM that's completely isolated from the host. If the API key isn't set, it falls back to Tier 2: a local Docker container. If Docker isn't running, Tier 3 is a host subprocess. I added full multilingual compilation and execution supporting C, C++, Rust, Java, Go, TypeScript, PHP, Node.js, Bash, and PowerShell so the agent can execute diverse scripts."*
-
-**Technical depth to add if asked:**
-- The `ExecutionSandbox` exposes a unified API: `execute_code()` and `execute_command()` — regardless of tier
-- Self-correction: if the Code Agent gets a `NameError` or `SyntaxError`, it analyzes the traceback, patches the code, and re-runs automatically — before returning to the user
-- `ModuleNotFoundError` triggers a cross-agent correction: the Orchestrator routes to `PackageManagerAgent` to `pip install` the missing package, then resumes execution
-
----
-
-### 🔍 4. Hybrid RAG — "How does your document analysis work?"
-
-**What to say:**
-> *"The Analyse Agent uses hybrid retrieval. I combine BM25 keyword search with FAISS vector search, merge and deduplicate the candidates, then rerank with BAAI/bge-reranker-v2-m3 via HuggingFace. The embeddings use BAAI/bge-m3. I also optimized the vector database updates: rather than rebuilding from scratch, it appends chunks incrementally on file uploads and removes them by chunk ID on file deletion."*
-
-**Technical depth to add if asked:**
-- Each user has a completely isolated FAISS index at `data/faiss_index/{user_id}/` — no cross-user data leakage
-- `BAAI/bge-m3` embeddings are fetched via HuggingFace Inference API with query instruction prefix for asymmetric retrieval. Falls back to local HuggingFaceEmbeddings if token not set
-- Documents are chunked with a `RecursiveCharacterTextSplitter` (500 tokens, 75 overlap) and indexed on upload — the RAG pipeline is always fresh
-
----
-
-### 🔐 5. Multi-User Auth & Isolation — "How do you handle multiple users?"
-
-**What to say:**
-> *"Every API request sends a Supabase JWT. FastAPI verifies it against the Supabase `/auth/v1/user` endpoint on every single request. Once verified, I set a `contextvars.ContextVar` called `current_user_id` to the user's UUID. Every downstream function — FAISS index path, database config, document directory, sandbox workspace — calls `current_user_id.get()` to resolve its path. So two users running simultaneous requests never touch the same files."*
-
-**Technical depth to add if asked:**
-- `contextvars.ContextVar` is the correct tool for async request scoping in Python — it's like thread-locals but works correctly across `async/await` and `asyncio` task boundaries
-- The profile config (`developer`, `analyst`, `edtech_studio`, etc.) is stored per-user in PostgreSQL and loaded at request time to filter the agent pool
-
----
-
-### 🤖 6. Self-Describing Agent Registry — "How do you add new agents?"
-
-**What to say:**
-> *"The agent registry uses Python's `importlib` to auto-discover every file in `backend/agents/` at startup. Each agent class defines a `name` and `description` string. The Planner LLM reads all descriptions dynamically — so when I drop a new agent file in that folder, the planner immediately knows it exists and can use it. I even built a meta-agent called `agent_builder_agent` that writes new agent Python files, validates them, and registers them. It now has an AST-based static analyzer to reject imports or calls to dangerous operations like eval(), exec(), and os.system()."*
-
-**Technical depth to add if asked:**
-- Each agent extends `BaseAgent` with a single `run(query: str) -> str` method — the contract is dead simple
-- Agent descriptions are injected into the Planner's system prompt as a formatted tool list — similar to OpenAI function calling but fully custom
-- The Agent Builder agent asks for user confirmation via a `needs_confirmation` SSE event before writing any files — so it can't create agents autonomously without human approval
-
----
-
-### 🏢 7. Industry Profiles — "Why 12 workspace profiles?"
-
-**What to say:**
-> *"The planner's accuracy improves significantly when the agent pool is smaller. A cybersecurity auditor doesn't need the EdTech lesson planner — giving the planner 8 relevant agents vs 37 total agents makes it pick the right tool faster and more reliably. Each profile also loads a curated UI: custom welcome chips, a dedicated subtitle, and role-specific suggestions. The EdTech profile even gets its own full React dashboard — `TeacherStudioDashboard.jsx` — instead of the standard chat interface."*
-
----
-
-### 📊 8. Questions Interviewers Commonly Ask — and your answers
-
-| Question | Your Answer |
-|---|---|
-| **"What was the hardest part to build?"** | *"The multi-tier sandbox fallback. Getting the Docker container to mount the right per-user workspace volume, auto-build the image if missing, and expose a unified API identical to E2B — while gracefully degrading — took careful abstraction design."* |
-| **"How does it compare to LangGraph or CrewAI?"** | *"JARVIS implements a custom ReAct loop from scratch rather than using a framework's graph abstraction — which gives me full control over the scratchpad format, SSE event timing, and per-step error handling. LangGraph is powerful but adds significant complexity for what I needed."* |
-| **"How would you scale this to production?"** | *"Replace SQLite with PostgreSQL via Supabase, replace local FAISS with a managed vector DB like Pinecone or pgvector, containerize the backend with Docker Compose, add a Redis queue for the SSE event bus instead of `queue.Queue`, and put a load balancer in front of multiple Uvicorn workers."* |
-| **"How do you prevent prompt injection?"** | *"The agent descriptions are injected as a read-only system message — user input never touches the agent tool list. The sandbox runs code in an isolated VM so even if the planner were manipulated to run malicious code, it can't access the host."* |
-| **"What would you do differently?"** | *"I'd add async execution for agents that can run in parallel — right now it's fully sequential. For queries like 'search X and search Y simultaneously', two search agents could run concurrently and shave 2-3 seconds off the response time."* |
-
----
 
 ## 📜 License
 
@@ -703,6 +602,6 @@ Built with **LangChain** · **HuggingFace** · **FastAPI** · **React** · **Sup
 
 🤖 *8 HuggingFace models · 37+ agents · 12 industry profiles · Real-time SSE streaming*
 
-⭐ *Star this repo if it helped you land a job in AI/ML engineering*
+⭐ *Star this repo if you liked it ot if it helped you*
 
 </div>
