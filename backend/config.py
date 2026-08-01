@@ -135,6 +135,24 @@ CHUNK_OVERLAP    = 75
 from backend.core.analytics import AnalyticsCallbackHandler
 analytics_handler = AnalyticsCallbackHandler()
 
+# ── Langfuse Tracing Integration ──────────────────────────────────────
+LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY", "")
+LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com")
+
+langfuse_handler = None
+if LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY:
+    try:
+        from langfuse.callback import CallbackHandler
+        langfuse_handler = CallbackHandler(
+            public_key=LANGFUSE_PUBLIC_KEY,
+            secret_key=LANGFUSE_SECRET_KEY,
+            host=LANGFUSE_HOST,
+        )
+        logging.getLogger("config").info("✅ Langfuse Tracing callback initialized successfully.")
+    except Exception as e:
+        logging.getLogger("config").warning(f"⚠️ Failed to initialize Langfuse callback: {e}")
+
 # ── LLM Caching Setup ──────────────────────────────────────────────────
 import logging
 import langchain
@@ -161,24 +179,30 @@ def _make_hf_chat_llm(model_id: str, temperature: float = 0.1, max_tokens: int =
     Requires HUGGINGFACE_API_TOKEN to be set.
     """
     from langchain_openai import ChatOpenAI
+    callbacks = [analytics_handler]
+    if langfuse_handler:
+        callbacks.append(langfuse_handler)
     return ChatOpenAI(
         model=model_id,
         openai_api_base=HF_BASE_URL,
         openai_api_key=HUGGINGFACE_API_TOKEN,
         temperature=temperature,
         max_tokens=max_tokens,
-        callbacks=[analytics_handler],
+        callbacks=callbacks,
     )
 
 
 def _make_groq_llm(model: str = "llama-3.3-70b-versatile", temperature: float = 0.3):
     """Create a Groq LLM as fallback when HF token is unavailable."""
     from langchain_groq import ChatGroq
+    callbacks = [analytics_handler]
+    if langfuse_handler:
+        callbacks.append(langfuse_handler)
     return ChatGroq(
         model=model,
         temperature=temperature,
         groq_api_key=GROQ_API_KEY,
-        callbacks=[analytics_handler],
+        callbacks=callbacks,
     )
 
 

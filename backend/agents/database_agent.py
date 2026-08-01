@@ -4,6 +4,8 @@ SQLite file operations for structured data creation, insertion, and querying.
 """
 
 import sqlite3
+import sqlglot
+import sqlglot.expressions as exp
 from langchain_core.tools import tool
 try:
     from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -18,6 +20,38 @@ from backend.logger import get_logger
 logger = get_logger("agents.database")
 
 
+def validate_sql_ast(sql_query: str) -> None:
+    """
+    Parses the SQL statement into an AST using sqlglot and validates it against security policies:
+    1. Blocks destructive schema changes (DROP, ALTER).
+    2. Blocks access to system / metadata tables (e.g., sqlite_master, conversations).
+    """
+    try:
+        expression = sqlglot.parse_one(sql_query, read="sqlite")
+        
+        # Traverse AST nodes
+        for node in expression.walk():
+            # Block DROP or ALTER commands
+            if isinstance(node, (exp.Drop, exp.Alter)):
+                raise PermissionError("Schema modification commands (DROP/ALTER) are blocked by the AST SQL Firewall.")
+            
+            # Block queries referencing system/sensitive tables
+            if isinstance(node, exp.Table):
+                table_name = node.name.lower()
+                forbidden_tables = [
+                    "profile_configs",
+                    "conversations",
+                    "document_chunks",
+                    "sqlite_master",
+                    "sqlite_sequence",
+                    "sqlite_stat",
+                ]
+                if table_name in forbidden_tables:
+                    raise PermissionError(f"Access to database system table '{table_name}' is blocked by the AST SQL Firewall.")
+    except sqlglot.errors.ParseError as pe:
+        raise ValueError(f"SQL Syntax / Parsing Error: {str(pe)}")
+
+
 @tool
 def execute_sql(sql_query: str) -> str:
     """
@@ -26,13 +60,12 @@ def execute_sql(sql_query: str) -> str:
     """
     logger.info(f"Executing SQL query: {sql_query}")
     
-    # Input validation / Sanitization against system-level metadata databases
-    forbidden_terms = ["profile_configs", "conversations", "document_chunks", "sqlite_master", "sqlite_sequence", "sqlite_stat"]
-    query_normalized = sql_query.lower()
-    for term in forbidden_terms:
-        if term in query_normalized:
-            logger.warning(f"SQL query rejected: Access to system table '{term}' is forbidden.")
-            return f"Error: SQL query rejected. Access to system table '{term}' is forbidden."
+    # Run AST Firewall validation
+    try:
+        validate_sql_ast(sql_query)
+    except Exception as e:
+        logger.warning(f"SQL query rejected by AST Firewall: {e}")
+        return f"Error: SQL query rejected by AST Firewall. Reason: {str(e)}"
 
     try:
         conn = sqlite3.connect(get_user_database_path())
