@@ -50,6 +50,72 @@ def load_workspace_rules() -> str:
     return "No custom workspace rules defined."
 
 
+def save_checkpoint(session_id: str, step_num: int, query: str, steps_taken: list, agents_used: set):
+    """Saves the current orchestrator state and snapshots the workspace directory."""
+    import json
+    import shutil
+    from backend.config import DATA_DIR, get_user_documents_dir
+
+    checkpoint_base = os.path.join(DATA_DIR, "checkpoints", session_id)
+    os.makedirs(checkpoint_base, exist_ok=True)
+
+    # Save state metadata JSON
+    metadata = {
+        "query": query,
+        "step_num": step_num,
+        "steps_taken": steps_taken,
+        "agents_used": list(agents_used)
+    }
+    meta_path = os.path.join(checkpoint_base, f"step_{step_num}.json")
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+
+    # Snapshot workspace files
+    workspace_src = get_user_documents_dir()
+    workspace_dst = os.path.join(checkpoint_base, f"step_{step_num}_workspace")
+    if os.path.exists(workspace_dst):
+        shutil.rmtree(workspace_dst)
+    if os.path.exists(workspace_src):
+        try:
+            shutil.copytree(workspace_src, workspace_dst, dirs_exist_ok=True)
+        except Exception as e:
+            logger.warning(f"Failed to fully snapshot workspace: {e}")
+
+    logger.info(f"Saved checkpoint for session '{session_id}' at step {step_num}")
+
+
+def load_checkpoint(session_id: str, step_num: int) -> dict:
+    """Loads orchestrator state from metadata and restores workspace directory."""
+    import json
+    import shutil
+    from backend.config import DATA_DIR, get_user_documents_dir
+
+    checkpoint_base = os.path.join(DATA_DIR, "checkpoints", session_id)
+    meta_path = os.path.join(checkpoint_base, f"step_{step_num}.json")
+    if not os.path.exists(meta_path):
+        raise FileNotFoundError(f"Checkpoint for session '{session_id}' at step {step_num} not found.")
+
+    with open(meta_path, "r", encoding="utf-8") as f:
+        metadata = json.load(f)
+
+    # Restore workspace files
+    workspace_src = os.path.join(checkpoint_base, f"step_{step_num}_workspace")
+    workspace_dst = get_user_documents_dir()
+    if os.path.exists(workspace_src):
+        if os.path.exists(workspace_dst):
+            try:
+                shutil.rmtree(workspace_dst)
+            except Exception as e:
+                logger.warning(f"Could not clear workspace before restore: {e}")
+        try:
+            shutil.copytree(workspace_src, workspace_dst, dirs_exist_ok=True)
+        except Exception as e:
+            logger.warning(f"Failed to fully restore workspace: {e}")
+
+    logger.info(f"Loaded checkpoint for session '{session_id}' at step {step_num}")
+    return metadata
+
+
 class Orchestrator:
     """
     The JARVIS brain. Orchestrates the full pipeline:
@@ -111,12 +177,12 @@ class Orchestrator:
             logger.error(error_msg)
             return error_msg
 
-    def run(self, query: str, session_id: str = "default_session", max_steps: int = 5, confirm_build: bool | None = None) -> dict:
+    def run(self, query: str, session_id: str = "default_session", max_steps: int = 5, confirm_build: bool | None = None, resume_step: int | None = None, save_checkpoints: bool = True) -> dict:
         """
         Main entry point. Takes a user query, runs a sequential planning loop,
         executes agents step-by-step, synthesizes, and returns the result.
         """
-        logger.info(f"Processing query: {query} (session: {session_id}, confirm_build: {confirm_build})")
+        logger.info(f"Processing query: {query} (session: {session_id}, confirm_build: {confirm_build}, resume_step: {resume_step})")
 
         # Set usage analytics context parameters
         current_session_id.set(session_id)
@@ -128,8 +194,20 @@ class Orchestrator:
 
         steps_taken = []
         agents_used = set()
+        start_step = 1
 
-        for step_num in range(1, max_steps + 1):
+        # Hydrate state from checkpoint if resume_step is specified
+        if resume_step is not None:
+            try:
+                checkpoint = load_checkpoint(session_id, resume_step)
+                steps_taken = checkpoint["steps_taken"]
+                agents_used = set(checkpoint["agents_used"])
+                start_step = resume_step + 1
+                logger.info(f"Successfully loaded checkpoint. Resuming execution from step {start_step}.")
+            except Exception as e:
+                logger.error(f"Failed to load checkpoint for resume: {e}. Starting from step 1.")
+
+        for step_num in range(start_step, max_steps + 1):
             # Format scratchpad
             scratchpad_lines = []
             for s in steps_taken:
@@ -251,6 +329,13 @@ class Orchestrator:
                     "query": act_query,
                     "result": res
                 })
+            
+            # Save checkpoint
+            if save_checkpoints:
+                try:
+                    save_checkpoint(session_id, step_num, query, steps_taken, agents_used)
+                except Exception as e:
+                    logger.error(f"Failed to save checkpoint: {e}")
 
         # Synthesize final output based on steps taken
         if steps_taken:

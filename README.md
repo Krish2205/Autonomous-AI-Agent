@@ -117,13 +117,17 @@ E2B_API_KEY present?
 - **Real-Time SSE Streaming:** `/api/query/stream` pushes planning steps, agent results, and synthesis tokens as they happen. Frontend renders a live blinking cursor and step-pill badges
 - **Conversation Memory:** Full multi-turn conversation history injected into every planner and agent call for context continuity
 - **Self-Correction:** Code Agent detects `SyntaxError`, `NameError`, `ModuleNotFoundError` and self-heals. Database Agent handles missing tables / columns via `ALTER TABLE`
+- **Agentic Checkpointing & Time-Travel Replay:** Automatically captures execution steps, conversation memory, and workspace file snapshots at each step of the orchestrator. Supports `resume_step` to allow rewinding and replaying failed flows.
+- **Langfuse Tracing Integration:** Native tracing instrumentation via Langfuse callback handler to monitor LLM invocations, agent steps, latencies, and token consumption with graceful offline fallback.
 
 ### Security & Isolation
 - **Multi-Tier Sandbox:** E2B Cloud → Docker Container → Host subprocess fallback, auto-detected at startup
+- **AST SQL Firewall:** Advanced SQL parser firewall utilizing `sqlglot` to validate SQLite queries in real time. Blocks destructive DDL actions (`DROP`, `ALTER`) and access to sensitive metadata/system tables (e.g. `sqlite_master`, `conversations`).
 - **Per-User Data Isolation:** Every user gets isolated FAISS indexes, SQLite databases, file storage, and profile configs via `contextvars.ContextVar`
 - **JWT Authentication:** Supabase JWT verified on every request. No shared state between users
 
 ### Integrations
+- **Model Context Protocol (MCP):** Stdio-compliant FastMCP server (`backend/mcp_server.py`) exposing specialized agent capabilities (`query_jarvis`, `run_db_query`, `search_web`) to external MCP client IDEs and agents.
 - **Google Workspace OAuth2:** Drive, Docs, Sheets, Calendar — agents create live documents and schedule events in users' accounts
 - **Gmail IMAP/SMTP:** Read inbox, fetch threads, and send emails programmatically
 - **Tavily Web Search:** Real-time web search with structured results
