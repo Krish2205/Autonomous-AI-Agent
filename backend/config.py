@@ -143,11 +143,9 @@ LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com")
 langfuse_handler = None
 if LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY:
     try:
-        from langfuse.callback import CallbackHandler
+        from langfuse.langchain import CallbackHandler
         langfuse_handler = CallbackHandler(
             public_key=LANGFUSE_PUBLIC_KEY,
-            secret_key=LANGFUSE_SECRET_KEY,
-            host=LANGFUSE_HOST,
         )
         logging.getLogger("config").info("✅ Langfuse Tracing callback initialized successfully.")
     except Exception as e:
